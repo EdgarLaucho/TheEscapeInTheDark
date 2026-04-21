@@ -4,6 +4,10 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "AIController.h"
+#include "Components/CapsuleComponent.h"
 #include "Containers/Ticker.h"
 #include "HAL/IConsoleManager.h"
 #include "UObject/UObjectIterator.h"
@@ -72,6 +76,8 @@ AActor* UObjectPoolSubsystem::AcquireFromPoolWithCallback(UObject* WorldContextO
 		Pool.ActiveActors.Add(Actor);
 		ActivateActor(Actor, SpawnTransform);
 		OnActorAcquired.Broadcast(Actor);
+		UE_LOG(LogTemp, Log, TEXT("[Pool] REUSE %s (inactive left: %d)"),
+			*ActorClass->GetName(), Pool.InactiveActors.Num());
 		return Actor;
 	}
 
@@ -83,6 +89,8 @@ AActor* UObjectPoolSubsystem::AcquireFromPoolWithCallback(UObject* WorldContextO
 			Pool.ActiveActors.Add(Actor);
 			ActivateActor(Actor, SpawnTransform);
 			OnActorAcquired.Broadcast(Actor);
+			UE_LOG(LogTemp, Warning, TEXT("[Pool] CREATE NEW %s (total: %d)"),
+				*ActorClass->GetName(), Pool.TotalCreated);
 			return Actor;
 		}
 	}
@@ -371,16 +379,35 @@ void UObjectPoolSubsystem::DeactivateActor(AActor* Actor)
 		return;
 	}
 
-	Actor->SetActorHiddenInGame(true);
-	Actor->SetActorEnableCollision(false);
-	Actor->SetActorTickEnabled(false);
+	if (ACharacter* Character = Cast<ACharacter>(Actor))
+	{
+		if (AAIController* AIC = Cast<AAIController>(Character->GetController()))
+		{
+			AIC->StopMovement();
+		}
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+		{
+			Movement->StopMovementImmediately();
+			Movement->SetMovementMode(MOVE_None);
+		}
+		if (UCapsuleComponent* Capsule = Character->GetCapsuleComponent())
+		{
+			Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+		{
+			Mesh->SetAllBodiesSimulatePhysics(false);
+		}
+	}
 
 	if (Actor->GetClass()->ImplementsInterface(UPoolableInterface::StaticClass()))
 	{
 		IPoolableInterface::Execute_OnReleasedToPool(Actor);
 	}
 
-	CallBPIPoolableDeactivate(Actor);
+	Actor->SetActorHiddenInGame(true);
+	Actor->SetActorEnableCollision(false);
+	Actor->SetActorTickEnabled(false);
 }
 
 void UObjectPoolSubsystem::ActivateActor(AActor* Actor, const FTransform& Transform)
@@ -395,12 +422,42 @@ void UObjectPoolSubsystem::ActivateActor(AActor* Actor, const FTransform& Transf
 	Actor->SetActorEnableCollision(true);
 	Actor->SetActorTickEnabled(true);
 
+	if (ACharacter* Character = Cast<ACharacter>(Actor))
+	{
+		if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+		{
+			Mesh->SetAllBodiesSimulatePhysics(false);
+			Mesh->SetCollisionProfileName(TEXT("CharacterMesh"));
+			Mesh->SetVisibility(true);
+
+			if (ACharacter* CDO = Cast<ACharacter>(Actor->GetClass()->GetDefaultObject()))
+			{
+				if (USkeletalMeshComponent* CDOMesh = CDO->GetMesh())
+				{
+					Mesh->SetRelativeLocationAndRotation(
+						CDOMesh->GetRelativeLocation(),
+						CDOMesh->GetRelativeRotation());
+				}
+			}
+		}
+		if (UCapsuleComponent* Capsule = Character->GetCapsuleComponent())
+		{
+			Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		}
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+		{
+			Movement->SetMovementMode(MOVE_Walking);
+		}
+		if (!Character->GetController())
+		{
+			Character->SpawnDefaultController();
+		}
+	}
+
 	if (Actor->GetClass()->ImplementsInterface(UPoolableInterface::StaticClass()))
 	{
 		IPoolableInterface::Execute_OnAcquiredFromPool(Actor);
 	}
-
-	CallBPIPoolableActivate(Actor);
 }
 
 void UObjectPoolSubsystem::CleanupPool(FObjectPool& Pool)
@@ -468,7 +525,7 @@ void UObjectPoolSubsystem::OnWorldCleanup(UWorld* World, bool bSessionEnded, boo
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("ObjectPool: World cleanup — clearing all pools (actors will be destroyed by level teardown)"));
+	UE_LOG(LogTemp, Log, TEXT("ObjectPool: world cleanup, clearing pools."));
 
 	for (auto& Pair : Pools)
 	{
@@ -482,32 +539,4 @@ void UObjectPoolSubsystem::OnWorldCleanup(UWorld* World, bool bSessionEnded, boo
 	Pools.Empty();
 }
 
-void UObjectPoolSubsystem::CallBPIPoolableActivate(AActor* Actor)
-{
-	if (!IsValid(Actor))
-	{
-		return;
-	}
 
-	static const FName FuncName(TEXT("ActivateFromPool"));
-	UFunction* Func = Actor->FindFunction(FuncName);
-	if (Func)
-	{
-		Actor->ProcessEvent(Func, nullptr);
-	}
-}
-
-void UObjectPoolSubsystem::CallBPIPoolableDeactivate(AActor* Actor)
-{
-	if (!IsValid(Actor))
-	{
-		return;
-	}
-
-	static const FName FuncName(TEXT("DesactivateToPool"));
-	UFunction* Func = Actor->FindFunction(FuncName);
-	if (Func)
-	{
-		Actor->ProcessEvent(Func, nullptr);
-	}
-}

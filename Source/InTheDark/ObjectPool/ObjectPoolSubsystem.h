@@ -82,9 +82,6 @@ private:
 	void OnWorldCleanup(UWorld* World, bool bSessionEnded, bool bCleanupResources);
 	FDelegateHandle WorldCleanupHandle;
 
-	void CallBPIPoolableActivate(AActor* Actor);
-	void CallBPIPoolableDeactivate(AActor* Actor);
-
 	bool bDebugEnabled = false;
 	FTSTicker::FDelegateHandle DebugTickerHandle;
 	bool DebugTick(float DeltaTime);
