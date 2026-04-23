@@ -3,6 +3,13 @@
 	"EngineAssociation": "5.6",
 	"Category": "",
 	"Description": "",
+	"Modules": [
+		{
+			"Name": "InTheDark",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
 	"Plugins": [
 		{
 			"Name": "ModelingToolsEditorMode",
@@ -21,10 +28,6 @@
 		},
 		{
 			"Name": "RawInput",
-			"Enabled": true
-		},
-		{
-			"Name": "SequencerSubtitles",
 			"Enabled": true
 		}
 	]
