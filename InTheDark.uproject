@@ -22,10 +22,6 @@
 		{
 			"Name": "RawInput",
 			"Enabled": true
-		},
-		{
-			"Name": "SequencerSubtitles",
-			"Enabled": true
 		}
 	]
 }
