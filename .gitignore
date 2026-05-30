@@ -75,5 +75,4 @@ Plugins/**/Intermediate/*
 DerivedDataCache/*
 .idea/
 /.vscode/*
-/Plugins/*
 /.github
