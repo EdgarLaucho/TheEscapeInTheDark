@@ -56,7 +56,7 @@ public:
 	TArray<FElementProgressionData> ElementProgressionData;
 
 	UFUNCTION(BlueprintCallable,Category="ElementProgression")
-	void AddKillToElement(FName ElementName);
+	void AddKillToElement(FName ElementName, int32 KillAmount = 1);
 
 	UFUNCTION(BlueprintCallable,Category="ElementProgression")
 	void UnlockElement(FName ElementName);
