@@ -87,6 +87,13 @@ void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 Kil
 		Data->DamageMultiplier += 0.15f;
 		Data->ScaleMultiplier +=0.10f;
 	}
+
 	
 }
+
+const TArray<FElementProgressionData>& UElementProgressionComponent::GetAllElementProgressionData() const
+{
+	return ElementProgressionData;
+}
+
 

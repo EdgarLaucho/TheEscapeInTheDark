@@ -63,6 +63,9 @@ public:
 
 	UFUNCTION(BlueprintCallable,Category="ElementProgression")
 	bool GetElementProgressionData(FName ElementName, FElementProgressionData& OutData) const;
+	
+	UFUNCTION(BlueprintCallable, Category="ElementProgression")
+	const TArray<FElementProgressionData>& GetAllElementProgressionData() const;
 
 private:
 	FElementProgressionData* FindElementProgressionData(FName ElementName);
