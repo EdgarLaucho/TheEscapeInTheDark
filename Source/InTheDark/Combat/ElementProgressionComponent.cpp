@@ -52,7 +52,7 @@ void UElementProgressionComponent::UnlockElement(FName ElementName)
 	Data->bUnlocked = true;
 }
 
-void UElementProgressionComponent::AddKillToElement(FName ElementName)
+void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 KillAmount)
 {
 	FElementProgressionData* Data = FindElementProgressionData(ElementName);
 
@@ -67,22 +67,33 @@ void UElementProgressionComponent::AddKillToElement(FName ElementName)
 		return;
 	
 
-	Data-> KillCount++;
-	const int32 RequiredIndex = Data->Level-1;
+	Data->KillCount += KillAmount;
+	while (Data->Level < Data->MaxLevel)
+	{
+		const int32 RequiredIndex = Data->Level-1;
 
-	if (!Data->KillsRequiredPerLevel.IsValidIndex(RequiredIndex))
-		return;
+		if (!Data->KillsRequiredPerLevel.IsValidIndex(RequiredIndex))
+			return;
 
-	const int32 RequiredKills = Data->KillsRequiredPerLevel[RequiredIndex];
+		const int32 RequiredKills = Data->KillsRequiredPerLevel[RequiredIndex];
 
-	if (Data->KillCount<RequiredKills)
-		return;
+		if (Data->KillCount<RequiredKills)
+			return;
 
-	Data->KillCount=0;
-	Data->Level++;
+		Data->KillCount -= RequiredKills;
+		Data->Level++;
 	
-	Data->MaxUnlockedComboStep= Data->Level-1;
-	Data->DamageMultiplier += 0.15f;
-	Data->ScaleMultiplier +=0.10f;
+		Data->MaxUnlockedComboStep= Data->Level-1;
+		Data->DamageMultiplier += 0.15f;
+		Data->ScaleMultiplier +=0.10f;
+	}
+
+	
 }
+
+const TArray<FElementProgressionData>& UElementProgressionComponent::GetAllElementProgressionData() const
+{
+	return ElementProgressionData;
+}
+
 
