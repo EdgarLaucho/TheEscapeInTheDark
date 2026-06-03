@@ -38,7 +38,7 @@ public:
 	bool CanActivateFusion()const;
 
 	UFUNCTION(BlueprintCallable, Category="Fusion")
-	void ActivateFusion(FName CurrentElement);
+	void ActivateFusion(FName CurrentElement, FName FusionResultElement);
 
 	UFUNCTION(BlueprintCallable, Category="Fusion")
 	FName GetActiveElementName() const;
