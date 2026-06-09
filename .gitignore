@@ -77,3 +77,8 @@ DerivedDataCache/*
 /.vscode/*
 /.github
 /PluginsContent/EuropeanBeech/
+
+# Local foliage assets
+Content/EuropeanBeech/
+Content/Lolium_perenne_Nanite_Free/
+Content/MSPresets/
