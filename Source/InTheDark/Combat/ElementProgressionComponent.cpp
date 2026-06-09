@@ -52,6 +52,21 @@ void UElementProgressionComponent::UnlockElement(FName ElementName)
 	Data->bUnlocked = true;
 }
 
+TArray<FName> UElementProgressionComponent::GetUnlockedElements() const
+{
+	TArray<FName> Result;
+
+	for (const FElementProgressionData& Data : ElementProgressionData)
+	{
+		if (Data.bUnlocked && !Data.bIsFusionElement)
+		{
+			Result.Add(Data.ElementName);
+		}
+	}
+
+	return Result;
+}
+
 void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 KillAmount)
 {
 	FElementProgressionData* Data = FindElementProgressionData(ElementName);

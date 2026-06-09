@@ -24,13 +24,13 @@ bool UElementFusionComponent::CanActivateFusion() const
 	return !bFusionActive && !bFusionOnCooldown;
 }
 
-void UElementFusionComponent::ActivateFusion(FName CurrentElement)
+void UElementFusionComponent::ActivateFusion(FName CurrentElement, FName FusionResultElement)
 {
 	if (!CanActivateFusion())
 		return;
 
 	BaseElementBeforeFusion = CurrentElement;
-	CurrentFusionElement = FusionElementName;
+	CurrentFusionElement = FusionResultElement;
 	bFusionActive = true;
 }
 

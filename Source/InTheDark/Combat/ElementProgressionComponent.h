@@ -35,6 +35,9 @@ struct FElementProgressionData
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="ElementProgression")
 	bool bUnlocked = false;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ElementProgression")
+	bool bIsFusionElement = false;
+	
 };
 
 
@@ -54,6 +57,9 @@ public:
 
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="ElementProgression")
 	TArray<FElementProgressionData> ElementProgressionData;
+
+	UFUNCTION(BlueprintCallable, Category="ElementProgression")
+	TArray<FName> GetUnlockedElements() const;
 
 	UFUNCTION(BlueprintCallable,Category="ElementProgression")
 	void AddKillToElement(FName ElementName, int32 KillAmount = 1);
