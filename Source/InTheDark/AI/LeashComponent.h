@@ -14,6 +14,7 @@
  *     y llama MoveToLocation(GetLeashTarget()) si está activo.
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLeashDeactivated);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLeashActivated);
 
 UCLASS(ClassGroup = AI, meta = (BlueprintSpawnableComponent),
        DisplayName = "Leash Component")
@@ -29,6 +30,10 @@ public:
 
 	// Desactiva el leash; el controlador retoma su comportamiento normal.
 	void DeactivateLeash();
+
+	// Se emite cuando el leash se activa (jugador sale del área).
+	UPROPERTY(BlueprintAssignable, Category = "Leash")
+	FOnLeashActivated OnLeashActivated;
 
 	// Se emite cuando el leash pasa de activo a inactivo.
 	UPROPERTY(BlueprintAssignable, Category = "Leash")

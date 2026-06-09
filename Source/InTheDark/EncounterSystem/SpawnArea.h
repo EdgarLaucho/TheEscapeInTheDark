@@ -138,6 +138,7 @@ private:
 	void ApplyLeashStateToActiveEnemies() const;
 	bool IsVisibleToPlayer(const AActor* Enemy) const;
 	bool GetRandomSpawnTransform(FTransform& OutTransform) const;
+	FVector GetClosestPointInAreaToPlayer() const;
 	TSubclassOf<AActor> PickEnemyClass() const;
 	int32 CountActiveOfClass(TSubclassOf<AActor> Class) const;
 	void CleanDeadEntries();

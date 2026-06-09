@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "NavigationSystem.h"
 #include "TimerManager.h"
 
 ASpawnArea::ASpawnArea()
@@ -411,8 +412,49 @@ void ASpawnArea::ApplyLeashState(AActor* Enemy) const
 	}
 	else
 	{
-		Leash->ActivateLeash(Enemy->GetActorLocation());
+		// Solo activar una vez con el centro del área como origen del random walk.
+		if (!Leash->IsLeashActive())
+		{
+			Leash->ActivateLeash(GetActorLocation());
+		}
 	}
+}
+
+FVector ASpawnArea::GetClosestPointInAreaToPlayer() const
+{
+	const FVector AreaCenter = GetActorLocation();
+
+	const AActor* Player = GetPlayerActor();
+	if (!Player) { return AreaCenter; }
+
+	// Margen interior para que el destino quede claramente DENTRO del área
+	// (no pegado al borde) y los enemigos no terminen sobre el límite del leash.
+	static constexpr float InnerMargin = 150.f;
+	const float MaxDist = FMath::Max(0.f, Rules.AreaRadius - InnerMargin);
+
+	// Dirección horizontal del centro del área hacia el jugador.
+	FVector ToPlayer = Player->GetActorLocation() - AreaCenter;
+	ToPlayer.Z = 0.f;
+	const float DistToPlayer = ToPlayer.Size();
+	const FVector Dir = DistToPlayer > KINDA_SMALL_NUMBER ? ToPlayer / DistToPlayer : GetActorForwardVector();
+
+	// Punto del área más cercano al jugador: como el jugador está fuera al salir,
+	// es el del borde en su dirección, recortado por el margen interior.
+	const FVector Point = AreaCenter + Dir * FMath::Min(DistToPlayer, MaxDist);
+
+	// Proyectar al NavMesh para garantizar que el destino sea alcanzable; si no
+	// hay navegación o no encuentra punto cercano, se usa el calculado.
+	if (const UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+	{
+		FNavLocation Projected;
+		const FVector QueryExtent(250.f, 250.f, 500.f);
+		if (NavSys->ProjectPointToNavigation(Point, Projected, QueryExtent))
+		{
+			return Projected.Location;
+		}
+	}
+
+	return Point;
 }
 
 void ASpawnArea::ApplyLeashStateToActiveEnemies() const
