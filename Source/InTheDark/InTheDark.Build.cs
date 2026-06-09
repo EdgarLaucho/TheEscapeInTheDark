@@ -16,6 +16,6 @@ public class InTheDark : ModuleRules
 			"InputCore"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Niagara", "GameplayTags", "AIModule" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Niagara", "GameplayTags", "AIModule", "NavigationSystem" });
 	}
 }
