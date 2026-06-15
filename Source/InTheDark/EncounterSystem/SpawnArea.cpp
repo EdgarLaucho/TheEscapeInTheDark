@@ -298,7 +298,7 @@ void ASpawnArea::TrySpawn()
 		Spawned = GetWorld()->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params);
 	}
 
-	if (Spawned)
+	if (IsValid(Spawned))
 	{
 		Spawned->OnDestroyed.AddDynamic(this, &ASpawnArea::OnEnemyDestroyed);
 		ActiveEnemies.Add(Spawned);
