@@ -75,6 +75,11 @@ AActor* UObjectPoolSubsystem::AcquireFromPoolWithCallback(UObject* WorldContextO
 		AActor* Actor = Pool.InactiveActors.Pop();
 		Pool.ActiveActors.Add(Actor);
 		ActivateActor(Actor, SpawnTransform);
+		if (!IsValid(Actor))
+		{
+			Pool.ActiveActors.Remove(Actor);
+			return nullptr;
+		}
 		OnActorAcquired.Broadcast(Actor);
 		UE_LOG(LogTemp, Log, TEXT("[Pool] REUSE %s (inactive left: %d)"),
 			*ActorClass->GetName(), Pool.InactiveActors.Num());
