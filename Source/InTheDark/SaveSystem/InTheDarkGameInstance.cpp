@@ -74,10 +74,9 @@ void UInTheDarkGameInstance::SwitchToSlot(int32 SlotIndex)
 		UE_LOG(LogTemp, Warning, TEXT("SwitchToSlot: index %d out of range [0..%d)"), SlotIndex, MaxSlots);
 		return;
 	}
-	if (bSaveDirty)
-	{
-		WriteSaveToDisk();
-	}
+	// No volcamos bSaveDirty aquí: este método se llama desde el menú principal, donde el único
+	// "dirty" posible es el nombre del mapa del menú que OnPostLoadMapWithWorld escribió en caché.
+	// Escribirlo corrompería el LastMapName del slot de destino antes de cargarlo.
 	CurrentSlotIndex = SlotIndex;
 	SaveSlotName = GetSlotName(SlotIndex);
 	LoadOrCreateSave();

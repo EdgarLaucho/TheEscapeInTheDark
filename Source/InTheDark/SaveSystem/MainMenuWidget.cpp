@@ -16,7 +16,7 @@
 #include "Styling/SlateBrush.h"
 #include "Styling/CoreStyle.h"
 
-const FName UMainMenuWidget::DefaultGameLevel = TEXT("Lvl_EscapeRouteFromTheDarkness");
+const FName UMainMenuWidget::DefaultGameLevel = TEXT("Lvl_TestPool");
 
 namespace NavColors
 {
@@ -240,16 +240,7 @@ void UMainMenuWidget::OnSlotSelected(int32 SlotIndex, bool bIsEmpty)
 	if (!GI) return;
 
 	GI->SwitchToSlot(SlotIndex);
-
-	FName LevelToLoad = DefaultGameLevel;
-	if (!bIsEmpty)
-	{
-		const FString LastMap = GI->GetLastMapName();
-		if (!LastMap.IsEmpty())
-			LevelToLoad = FName(*LastMap);
-	}
-
-	UGameplayStatics::OpenLevel(this, LevelToLoad);
+	UGameplayStatics::OpenLevel(this, DefaultGameLevel);
 }
 
 void UMainMenuWidget::OnSlotReset(int32 SlotIndex)

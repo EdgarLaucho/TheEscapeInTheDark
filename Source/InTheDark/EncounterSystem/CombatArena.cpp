@@ -39,7 +39,8 @@ void ACombatArena::BeginPlay()
 
 	if (bSkipIfAlreadyCleared && LookupIsAlreadyCleared())
 	{
-		UnlockAllGates();
+		// Diferir un tick para que las puertas completen su propio BeginPlay antes de cambiar su estado.
+		GetWorldTimerManager().SetTimerForNextTick(this, &ACombatArena::UnlockGatesForClearedState);
 		UE_LOG(LogTemp, Log, TEXT("CombatArena '%s' (%s): already cleared; skipping."),
 			*GetName(), *EncounterId.ToString());
 		return;
@@ -139,7 +140,7 @@ void ACombatArena::RequestStart()
 	if (LookupIsAlreadyCleared()) { return; }
 
 	bAlreadyStartedThisSession = true;
-	LockAllGates();
+	LockEntryGates();
 	Director->StartEncounter();
 }
 
@@ -150,7 +151,8 @@ void ACombatArena::HandleEncounterStarted()
 
 void ACombatArena::HandleEncounterCleared()
 {
-	UnlockAllGates();
+	if (bUnlockEntryGatesOnClear) { UnlockEntryGates(); }
+	UnlockExitGates();
 	SpawnReward();
 
 	if (GEngine)
@@ -172,7 +174,7 @@ void ACombatArena::HandleEncounterCleared()
 
 void ACombatArena::HandleEncounterFailed()
 {
-	UnlockAllGates();
+	UnlockEntryGates();
 	if (Config && Config->bReloadCheckpointOnFailure)
 	{
 		if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
@@ -198,20 +200,37 @@ void ACombatArena::SpawnReward()
 	GetWorld()->SpawnActor<AActor>(Cls, RewardAnchor->GetComponentTransform(), P);
 }
 
-void ACombatArena::LockAllGates()
+void ACombatArena::LockEntryGates()
 {
-	for (const TObjectPtr<AEncounterGate>& G : Gates)
+	for (const TObjectPtr<AEncounterGate>& G : EntryGates)
 	{
 		if (G) { G->Lock(); }
 	}
 }
 
-void ACombatArena::UnlockAllGates()
+void ACombatArena::UnlockEntryGates()
 {
-	for (const TObjectPtr<AEncounterGate>& G : Gates)
+	for (const TObjectPtr<AEncounterGate>& G : EntryGates)
 	{
 		if (G) { G->Unlock(); }
 	}
+}
+
+void ACombatArena::UnlockExitGates()
+{
+	for (const TObjectPtr<AEncounterGate>& G : ExitGates)
+	{
+		if (G) { G->Unlock(); }
+	}
+}
+
+void ACombatArena::UnlockGatesForClearedState()
+{
+	if (bUnlockEntryGatesOnClear)
+		UnlockEntryGates();
+	else
+		LockEntryGates();  // Las puertas de entrada se cierran definitivamente al completar el reto
+	UnlockExitGates();
 }
 
 int32 ACombatArena::AutoBindAnchorsByTag(FGameplayTagContainer Filter)

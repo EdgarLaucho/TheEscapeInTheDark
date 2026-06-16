@@ -47,8 +47,17 @@ public:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Encounter|Authoring")
 	TArray<TObjectPtr<ASpawnAnchor>> Anchors;
 
+	/** Puertas de entrada: se CIERRAN al iniciar el encuentro. Opcional. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Encounter|Authoring")
-	TArray<TObjectPtr<AEncounterGate>> Gates;
+	TArray<TObjectPtr<AEncounterGate>> EntryGates;
+
+	/** Si es true, las EntryGates se abren también al completar el encuentro. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Encounter|Authoring")
+	bool bUnlockEntryGatesOnClear = false;
+
+	/** Puertas de salida: se ABREN al completar el encuentro. Opcional. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Encounter|Authoring")
+	TArray<TObjectPtr<AEncounterGate>> ExitGates;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Encounter|Authoring")
 	bool bAutoStartOnOverlap = true;
@@ -108,6 +117,8 @@ protected:
 private:
 	bool bAlreadyStartedThisSession = false;
 	bool LookupIsAlreadyCleared() const;
-	void LockAllGates();
-	void UnlockAllGates();
+	void LockEntryGates();
+	void UnlockEntryGates();
+	void UnlockExitGates();
+	void UnlockGatesForClearedState();
 };
