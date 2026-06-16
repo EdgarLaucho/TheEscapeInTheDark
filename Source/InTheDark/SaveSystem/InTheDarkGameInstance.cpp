@@ -3,6 +3,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Misc/CoreDelegates.h"
+#include "GameFramework/PlayerStart.h"
+#include "EngineUtils.h"
 
 UInTheDarkGameInstance::UInTheDarkGameInstance() = default;
 
@@ -153,6 +155,20 @@ void UInTheDarkGameInstance::SaveAtCheckpoint(FName CheckpointID, const FSavedPl
 	PlayerStateCache.LastCheckpointID = CheckpointID;
 	bSaveDirty = true;
 	WriteSaveToDiskAsync();
+}
+
+FTransform UInTheDarkGameInstance::GetSpawnTransform(UObject* WorldContextObject) const
+{
+	if (HasSavedTransform())
+		return PlayerStateCache.Transform;
+
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (World)
+	{
+		for (TActorIterator<APlayerStart> It(World); It; ++It)
+			return (*It)->GetActorTransform();
+	}
+	return FTransform::Identity;
 }
 
 // ── Inventory ─────────────────────────────────────────────
@@ -381,8 +397,17 @@ void UInTheDarkGameInstance::ClearEncounters()
 
 void UInTheDarkGameInstance::SetLastMapName(const FString& MapName)
 {
-	if (CachedLastMapName == MapName) return;
-	CachedLastMapName = MapName;
+	FString CleanName = MapName;
+	// Strip PIE prefix so save files always store the bare map name
+	if (CleanName.StartsWith(TEXT("UEDPIE_")))
+	{
+		int32 LastUnder = INDEX_NONE;
+		CleanName.FindLastChar(TEXT('_'), LastUnder);
+		if (LastUnder != INDEX_NONE)
+			CleanName = CleanName.Mid(LastUnder + 1);
+	}
+	if (CachedLastMapName == CleanName) return;
+	CachedLastMapName = CleanName;
 	bSaveDirty = true;
 }
 
@@ -610,7 +635,10 @@ bool UInTheDarkGameInstance::DeleteSave()
 void UInTheDarkGameInstance::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 {
 	if (!LoadedWorld) return;
-	SetLastMapName(LoadedWorld->GetMapName());
+	if (DoesSaveSlotExist())
+	{
+		SetLastMapName(LoadedWorld->GetMapName());
+	}
 	if (bAutosaveOnMapChange && bSaveDirty)
 	{
 		WriteSaveToDiskAsync();

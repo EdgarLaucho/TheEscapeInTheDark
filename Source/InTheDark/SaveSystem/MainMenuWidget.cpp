@@ -175,7 +175,10 @@ void UMainMenuWidget::BuildLayout()
 		{
 			SlotWidgets.Add(SlotW);
 			if (UVerticalBoxSlot* S = SlotPanel->AddChildToVerticalBox(SlotW))
+			{
+				S->SetHorizontalAlignment(HAlign_Fill);
 				S->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
+			}
 		}
 	}
 

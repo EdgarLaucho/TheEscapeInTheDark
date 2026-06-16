@@ -80,7 +80,8 @@ void USaveSlotEntryWidget::NativeOnInitialized()
 	// Left: text info
 	UVerticalBox* InfoCol = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 	TXT_SlotTitle = MakeText(TEXT("RANURA 1"), 13, SlotColors::Gold, true);
-	TXT_Status    = MakeText(TEXT("Nueva partida"), 12, SlotColors::White);
+	TXT_Status    = MakeText(TEXT("Nueva partida"), 11, SlotColors::White);
+	TXT_Status->SetAutoWrapText(true);
 	TXT_Date      = MakeText(TEXT(""), 10, SlotColors::Gray);
 
 	InfoCol->AddChildToVerticalBox(TXT_SlotTitle);
@@ -136,7 +137,11 @@ void USaveSlotEntryWidget::InitSlot(const FSaveSlotInfo& Info, UMainMenuWidget* 
 	}
 	else
 	{
-		TXT_Status->SetText(FText::FromString(Info.DisplayMapName));
+		FString DisplayName = Info.DisplayMapName;
+		const int32 MaxLen = 22;
+		if (DisplayName.Len() > MaxLen)
+			DisplayName = DisplayName.Left(MaxLen - 3) + TEXT("...");
+		TXT_Status->SetText(FText::FromString(DisplayName));
 		const FString DateStr = FString::Printf(TEXT("%02d/%02d/%04d  %02d:%02d"),
 			Info.SavedAt.GetDay(), Info.SavedAt.GetMonth(), Info.SavedAt.GetYear(),
 			Info.SavedAt.GetHour(), Info.SavedAt.GetMinute());

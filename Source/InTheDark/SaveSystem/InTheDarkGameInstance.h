@@ -71,6 +71,18 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
 	FName GetLastCheckpointID() const { return PlayerStateCache.LastCheckpointID; }
 
+	/** True si el jugador tiene una posición guardada (pasó por al menos un checkpoint). */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
+	bool HasSavedTransform() const { return PlayerStateCache.LastCheckpointID != NAME_None; }
+
+	/**
+	 * Devuelve el transform donde debe aparecer el jugador al cargar la escena:
+	 * - Si hay checkpoint guardado → usa el transform guardado.
+	 * - Si es partida nueva      → busca el primer PlayerStart del mundo y usa su transform.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player", meta = (WorldContext = "WorldContextObject"))
+	FTransform GetSpawnTransform(UObject* WorldContextObject) const;
+
 	// ──── Inventario ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Inventory")
