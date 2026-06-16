@@ -134,6 +134,28 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World|Door")
 	bool IsDoorOpened(const FString& DoorID) const { return IsWorldActorMarked(FName("Door"), DoorID); }
 
+	// ──── Progresión de Elementos ────────────────────────────────────────────
+
+	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
+	void UpdateElementProgression(const FSavedElementProgressionEntry& Entry);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
+	void SetElementProgressionCache(const TArray<FSavedElementProgressionEntry>& Data);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|ElementProgression")
+	const TArray<FSavedElementProgressionEntry>& GetElementProgressionCache() const { return ElementProgressionCache; }
+
+	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
+	void ClearElementProgression();
+
+	// ──── Personalidad del Compañero ──────────────────────────────────────────────
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Companion")
+	void UpdateCompanionPersonality(float Courage, float Anxiety, float Confidence, float AggressionAffinity, float StealthAffinity);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
+	FSavedCompanionPersonality GetCompanionPersonality() const { return CompanionPersonalityCache; }
+
 	// ──── Encounters ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Encounters")
@@ -224,6 +246,8 @@ protected:
 
 private:
 	TArray<FSavedInventoryEntry> InventoryCache;
+	TArray<FSavedElementProgressionEntry> ElementProgressionCache;
+	FSavedCompanionPersonality CompanionPersonalityCache;
 	TMap<FName, TSet<FString>> WorldStateCache;
 	TSet<FName> ClearedEncountersCache;
 	FSavedPlayerState PlayerStateCache;

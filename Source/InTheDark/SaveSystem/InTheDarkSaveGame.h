@@ -46,4 +46,10 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Meta")
 	FString LastMapName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|ElementProgression")
+	TArray<FSavedElementProgressionEntry> ElementProgression;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Companion")
+	FSavedCompanionPersonality CompanionPersonality;
 };

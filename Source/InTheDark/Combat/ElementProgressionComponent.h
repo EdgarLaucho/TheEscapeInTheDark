@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "SaveSystem/SaveTypes.h"
 #include "ElementProgressionComponent.generated.h"
 
 USTRUCT(BlueprintType)
@@ -72,6 +73,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category="ElementProgression")
 	const TArray<FElementProgressionData>& GetAllElementProgressionData() const;
+
+	UFUNCTION(BlueprintCallable, Category="ElementProgression")
+	void RestoreFromSave(const TArray<FSavedElementProgressionEntry>& SavedData);
 
 private:
 	FElementProgressionData* FindElementProgressionData(FName ElementName);
