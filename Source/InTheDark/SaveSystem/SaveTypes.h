@@ -39,6 +39,56 @@ struct INTHEDARK_API FSavedPlayerState
 	FName LastCheckpointID = NAME_None;
 };
 
+/** Progresión de un elemento guardada en disco. */
+USTRUCT(BlueprintType)
+struct INTHEDARK_API FSavedElementProgressionEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ElementProgression")
+	FName ElementName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ElementProgression")
+	int32 Level = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ElementProgression")
+	int32 KillCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ElementProgression")
+	float DamageMultiplier = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ElementProgression")
+	float ScaleMultiplier = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ElementProgression")
+	int32 MaxUnlockedComboStep = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "ElementProgression")
+	bool bUnlocked = false;
+};
+
+/** Personalidad del compañero IA guardada en disco. */
+USTRUCT(BlueprintType)
+struct INTHEDARK_API FSavedCompanionPersonality
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	float Courage = 51.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	float Anxiety = 80.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	float Confidence = 25.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	float AggressionAffinity = 31.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	float StealthAffinity = 30.f;
+};
+
 /** Metadatos ligeros del slot mostrados en el menú de selección de guardado. */
 USTRUCT(BlueprintType)
 struct INTHEDARK_API FSaveSlotInfo

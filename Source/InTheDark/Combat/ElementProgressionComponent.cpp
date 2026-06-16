@@ -1,4 +1,5 @@
 #include "Combat/ElementProgressionComponent.h"
+#include "SaveSystem/InTheDarkGameInstance.h"
 
 UElementProgressionComponent::UElementProgressionComponent()
 {
@@ -42,14 +43,33 @@ bool UElementProgressionComponent::GetElementProgressionData(FName ElementName, 
 	return false;
 }
 
+static FSavedElementProgressionEntry MakeSavedEntry(const FElementProgressionData& Data)
+{
+	FSavedElementProgressionEntry Entry;
+	Entry.ElementName = Data.ElementName;
+	Entry.Level = Data.Level;
+	Entry.KillCount = Data.KillCount;
+	Entry.DamageMultiplier = Data.DamageMultiplier;
+	Entry.ScaleMultiplier = Data.ScaleMultiplier;
+	Entry.MaxUnlockedComboStep = Data.MaxUnlockedComboStep;
+	Entry.bUnlocked = Data.bUnlocked;
+	return Entry;
+}
+
 void UElementProgressionComponent::UnlockElement(FName ElementName)
 {
 	FElementProgressionData* Data = FindElementProgressionData(ElementName);
 
 	if (!Data)
 		return;
-	
+
 	Data->bUnlocked = true;
+
+	if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
+		GetWorld() ? GetWorld()->GetGameInstance() : nullptr))
+	{
+		GI->UpdateElementProgression(MakeSavedEntry(*Data));
+	}
 }
 
 TArray<FName> UElementProgressionComponent::GetUnlockedElements() const
@@ -103,12 +123,31 @@ void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 Kil
 		Data->ScaleMultiplier +=0.10f;
 	}
 
-	
+	if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
+		GetWorld() ? GetWorld()->GetGameInstance() : nullptr))
+	{
+		GI->UpdateElementProgression(MakeSavedEntry(*Data));
+	}
 }
 
 const TArray<FElementProgressionData>& UElementProgressionComponent::GetAllElementProgressionData() const
 {
 	return ElementProgressionData;
+}
+
+void UElementProgressionComponent::RestoreFromSave(const TArray<FSavedElementProgressionEntry>& SavedData)
+{
+	for (const FSavedElementProgressionEntry& Saved : SavedData)
+	{
+		FElementProgressionData* Data = FindElementProgressionData(Saved.ElementName);
+		if (!Data) continue;
+		Data->Level                = Saved.Level;
+		Data->KillCount            = Saved.KillCount;
+		Data->DamageMultiplier     = Saved.DamageMultiplier;
+		Data->ScaleMultiplier      = Saved.ScaleMultiplier;
+		Data->MaxUnlockedComboStep = Saved.MaxUnlockedComboStep;
+		Data->bUnlocked            = Saved.bUnlocked;
+	}
 }
 
 

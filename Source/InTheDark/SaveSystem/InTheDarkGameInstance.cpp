@@ -44,6 +44,8 @@ FString UInTheDarkGameInstance::GetSlotName(int32 SlotIndex) const
 void UInTheDarkGameInstance::ResetCache()
 {
 	InventoryCache.Reset();
+	ElementProgressionCache.Reset();
+	CompanionPersonalityCache = FSavedCompanionPersonality();
 	WorldStateCache.Reset();
 	ClearedEncountersCache.Reset();
 	PlayerStateCache = FSavedPlayerState();
@@ -291,6 +293,50 @@ void UInTheDarkGameInstance::ClearWorldCategory(FName Category)
 	}
 }
 
+// ── Element Progression ───────────────────────────────────
+
+void UInTheDarkGameInstance::UpdateElementProgression(const FSavedElementProgressionEntry& Entry)
+{
+	if (Entry.ElementName.IsNone()) return;
+
+	for (FSavedElementProgressionEntry& Existing : ElementProgressionCache)
+	{
+		if (Existing.ElementName == Entry.ElementName)
+		{
+			Existing = Entry;
+			bSaveDirty = true;
+			return;
+		}
+	}
+	ElementProgressionCache.Add(Entry);
+	bSaveDirty = true;
+}
+
+void UInTheDarkGameInstance::SetElementProgressionCache(const TArray<FSavedElementProgressionEntry>& Data)
+{
+	ElementProgressionCache = Data;
+	bSaveDirty = true;
+}
+
+void UInTheDarkGameInstance::ClearElementProgression()
+{
+	if (ElementProgressionCache.Num() == 0) return;
+	ElementProgressionCache.Reset();
+	bSaveDirty = true;
+}
+
+// ── Companion Personality ─────────────────────────────────
+
+void UInTheDarkGameInstance::UpdateCompanionPersonality(float Courage, float Anxiety, float Confidence, float AggressionAffinity, float StealthAffinity)
+{
+	CompanionPersonalityCache.Courage = Courage;
+	CompanionPersonalityCache.Anxiety = Anxiety;
+	CompanionPersonalityCache.Confidence = Confidence;
+	CompanionPersonalityCache.AggressionAffinity = AggressionAffinity;
+	CompanionPersonalityCache.StealthAffinity = StealthAffinity;
+	bSaveDirty = true;
+}
+
 // ── Encounters ────────────────────────────────────────────
 
 void UInTheDarkGameInstance::MarkEncounterCleared(FName EncounterId)
@@ -356,6 +402,8 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 	Payload.SavedAtUtc = FDateTime::UtcNow();
 	Payload.PlayerState = PlayerStateCache;
 	Payload.Inventory = InventoryCache;
+	Payload.ElementProgression = ElementProgressionCache;
+	Payload.CompanionPersonality = CompanionPersonalityCache;
 	Payload.LastMapName = CachedLastMapName;
 
 	// Estado del mundo: TMap<FName, TSet<FString>> -> TMap<FName, FWorldActorIDList>
@@ -375,6 +423,8 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 {
 	PlayerStateCache = Payload.PlayerState;
 	InventoryCache = Payload.Inventory;
+	ElementProgressionCache = Payload.ElementProgression;
+	CompanionPersonalityCache = Payload.CompanionPersonality;
 	CachedLastMapName = Payload.LastMapName;
 
 	// Estado del mundo: TMap<FName, FWorldActorIDList> -> TMap<FName, TSet<FString>>

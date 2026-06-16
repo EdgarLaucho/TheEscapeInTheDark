@@ -39,6 +39,7 @@ void ACombatArena::BeginPlay()
 
 	if (bSkipIfAlreadyCleared && LookupIsAlreadyCleared())
 	{
+		UnlockAllGates();
 		UE_LOG(LogTemp, Log, TEXT("CombatArena '%s' (%s): already cleared; skipping."),
 			*GetName(), *EncounterId.ToString());
 		return;
