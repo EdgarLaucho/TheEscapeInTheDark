@@ -139,14 +139,14 @@ void UMainMenuWidget::BuildLayout()
 	if (UVerticalBoxSlot* S = VBox->AddChildToVerticalBox(MainPanel))
 		S->SetHorizontalAlignment(HAlign_Fill);
 
-	BTN_Play = MakeNavButton(TEXT("JUGAR"));
+	BTN_Play = MakeNavButton(TEXT("PLAY"));
 	if (UVerticalBoxSlot* S = MainPanel->AddChildToVerticalBox(BTN_Play))
 	{
 		S->SetHorizontalAlignment(HAlign_Fill);
 		S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
 	}
 
-	BTN_Quit = MakeNavButton(TEXT("SALIR DEL JUEGO"), true);
+	BTN_Quit = MakeNavButton(TEXT("QUIT GAME"), true);
 	if (UVerticalBoxSlot* S = MainPanel->AddChildToVerticalBox(BTN_Quit))
 	{
 		S->SetHorizontalAlignment(HAlign_Fill);
@@ -159,7 +159,7 @@ void UMainMenuWidget::BuildLayout()
 	if (UVerticalBoxSlot* S = VBox->AddChildToVerticalBox(SlotPanel))
 		S->SetHorizontalAlignment(HAlign_Fill);
 
-	UTextBlock* SlotHeader = MakeText(TEXT("SELECCIONAR RANURA"), 12, NavColors::Subtitle, true);
+	UTextBlock* SlotHeader = MakeText(TEXT("SELECT SLOT"), 12, NavColors::Subtitle, true);
 	SlotHeader->SetJustification(ETextJustify::Center);
 	if (UVerticalBoxSlot* S = SlotPanel->AddChildToVerticalBox(SlotHeader))
 	{
@@ -182,7 +182,7 @@ void UMainMenuWidget::BuildLayout()
 		}
 	}
 
-	BTN_Back = MakeNavButton(TEXT("← VOLVER"));
+	BTN_Back = MakeNavButton(TEXT("← BACK"));
 	if (UVerticalBoxSlot* S = SlotPanel->AddChildToVerticalBox(BTN_Back))
 	{
 		S->SetHorizontalAlignment(HAlign_Fill);
