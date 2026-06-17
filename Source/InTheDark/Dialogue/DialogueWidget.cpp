@@ -4,6 +4,8 @@
 #include "Components/Button.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
@@ -23,7 +25,7 @@ void UDialogueWidget::BuildLayout()
 	UOverlay* Root = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
 	WidgetTree->RootWidget = Root;
 
-	// ── Capa 0: botón transparente que captura todos los clicks ──────────────
+	// ── Layer 0: transparent full-screen click catcher ────────────────────
 	UButton* ClickCatcher = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
 	FButtonStyle EmptyStyle;
 	EmptyStyle.Normal         = FSlateNoResource();
@@ -39,51 +41,92 @@ void UDialogueWidget::BuildLayout()
 		S->SetVerticalAlignment(VAlign_Fill);
 	}
 
-	// ── Capa 1: panel visual (HitTestInvisible — los clicks pasan a la capa 0) ──
+	// ── Layer 1: visual panel (HitTestInvisible) ──────────────────────────
 	USizeBox* PanelSB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	PanelSB->SetHeightOverride(180.f);
+	PanelSB->SetWidthOverride(920.f);
+	PanelSB->SetHeightOverride(220.f);
 	PanelSB->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UOverlaySlot* S = Root->AddChildToOverlay(PanelSB))
 	{
-		S->SetHorizontalAlignment(HAlign_Fill);
+		S->SetHorizontalAlignment(HAlign_Center);
 		S->SetVerticalAlignment(VAlign_Bottom);
-		S->SetPadding(FMargin(80.f, 0.f, 80.f, 40.f));
+		S->SetPadding(FMargin(0.f, 0.f, 0.f, 40.f));
 	}
 
+	// Thin warm outline border (gold-brown, 1px)
+	UBorder* OutlineBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	OutlineBdr->SetBrushColor(FLinearColor(0.32f, 0.22f, 0.08f, 0.80f));
+	OutlineBdr->SetPadding(FMargin(1.f));
+	PanelSB->SetContent(OutlineBdr);
+
+	// Main dark warm panel
 	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Panel->SetBrushColor(FLinearColor(0.02f, 0.015f, 0.04f, 0.92f));
-	Panel->SetPadding(FMargin(28.f, 18.f));
-	PanelSB->SetContent(Panel);
+	Panel->SetBrushColor(FLinearColor(0.022f, 0.016f, 0.010f, 0.97f));
+	Panel->SetPadding(FMargin(26.f, 18.f, 26.f, 16.f));
+	OutlineBdr->SetContent(Panel);
 
 	UVerticalBox* VBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 	Panel->SetContent(VBox);
 
-	// Nombre del hablante
-	SpeakerText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	SpeakerText->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 13));
-	SpeakerText->SetColorAndOpacity(FSlateColor(FLinearColor(0.88f, 0.70f, 0.25f, 1.f)));
-	if (UVerticalBoxSlot* S = VBox->AddChildToVerticalBox(SpeakerText))
-		S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
+	// ── Speaker row: [3px gold accent bar] [name] ────────────────────────
+	UHorizontalBox* SpeakerRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	if (UVerticalBoxSlot* VS = VBox->AddChildToVerticalBox(SpeakerRow))
+		VS->SetHorizontalAlignment(HAlign_Fill);
 
-	// Texto del diálogo
-	DialogueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-	DialogueText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 12));
-	DialogueText->SetColorAndOpacity(FSlateColor(FLinearColor(0.90f, 0.88f, 0.85f, 1.f)));
-	DialogueText->SetAutoWrapText(true);
-	if (UVerticalBoxSlot* S = VBox->AddChildToVerticalBox(DialogueText))
+	USizeBox* AccentSB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	AccentSB->SetWidthOverride(3.f);
+	UBorder* AccentBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	AccentBdr->SetBrushColor(FLinearColor(0.88f, 0.70f, 0.25f, 1.f));
+	AccentBdr->SetPadding(FMargin(0.f));
+	AccentSB->SetContent(AccentBdr);
+	if (UHorizontalBoxSlot* HS = SpeakerRow->AddChildToHorizontalBox(AccentSB))
+		HS->SetVerticalAlignment(VAlign_Fill);
+
+	USizeBox* GapSB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	GapSB->SetWidthOverride(12.f);
+	SpeakerRow->AddChildToHorizontalBox(GapSB);
+
+	SpeakerText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	SpeakerText->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 14));
+	SpeakerText->SetColorAndOpacity(FSlateColor(FLinearColor(0.88f, 0.70f, 0.25f, 1.f)));
+	if (UHorizontalBoxSlot* HS = SpeakerRow->AddChildToHorizontalBox(SpeakerText))
 	{
-		S->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-		S->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
+		HS->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		HS->SetVerticalAlignment(VAlign_Center);
 	}
 
-	// Hint
+	// ── Thin separator line ───────────────────────────────────────────────
+	USizeBox* SepSB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	SepSB->SetHeightOverride(1.f);
+	UBorder* SepBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	SepBdr->SetBrushColor(FLinearColor(0.18f, 0.12f, 0.06f, 1.f));
+	SepBdr->SetPadding(FMargin(0.f));
+	SepSB->SetContent(SepBdr);
+	if (UVerticalBoxSlot* VS = VBox->AddChildToVerticalBox(SepSB))
+	{
+		VS->SetHorizontalAlignment(HAlign_Fill);
+		VS->SetPadding(FMargin(0.f, 10.f, 0.f, 14.f));
+	}
+
+	// ── Dialogue text ─────────────────────────────────────────────────────
+	DialogueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	DialogueText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 13));
+	DialogueText->SetColorAndOpacity(FSlateColor(FLinearColor(0.90f, 0.86f, 0.78f, 1.f)));
+	DialogueText->SetAutoWrapText(true);
+	if (UVerticalBoxSlot* VS = VBox->AddChildToVerticalBox(DialogueText))
+	{
+		VS->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		VS->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
+	}
+
+	// ── Hint ──────────────────────────────────────────────────────────────
 	UTextBlock* HintText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	HintText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
-	HintText->SetColorAndOpacity(FSlateColor(FLinearColor(0.48f, 0.42f, 0.36f, 1.f)));
-	HintText->SetText(FText::FromString(TEXT("[ Click to continue ]")));
+	HintText->SetColorAndOpacity(FSlateColor(FLinearColor(0.40f, 0.30f, 0.14f, 1.f)));
+	HintText->SetText(FText::FromString(TEXT("[ click to advance ]")));
 	HintText->SetJustification(ETextJustify::Right);
-	if (UVerticalBoxSlot* S = VBox->AddChildToVerticalBox(HintText))
-		S->SetHorizontalAlignment(HAlign_Fill);
+	if (UVerticalBoxSlot* VS = VBox->AddChildToVerticalBox(HintText))
+		VS->SetHorizontalAlignment(HAlign_Fill);
 }
 
 void UDialogueWidget::ShowLine(const FDialogueLine& Line)
