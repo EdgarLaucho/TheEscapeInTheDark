@@ -168,6 +168,14 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
 	FSavedCompanionPersonality GetCompanionPersonality() const { return CompanionPersonalityCache; }
 
+	// ──── Diálogos ──────────────────────────────────────────────
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Dialogue")
+	bool IsDialogueSeen(FName DialogueID) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Dialogue")
+	void MarkDialogueSeen(FName DialogueID);
+
 	// ──── Encounters ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Encounters")
@@ -262,6 +270,7 @@ private:
 	FSavedCompanionPersonality CompanionPersonalityCache;
 	TMap<FName, TSet<FString>> WorldStateCache;
 	TSet<FName> ClearedEncountersCache;
+	TSet<FName> SeenDialoguesCache;
 	FSavedPlayerState PlayerStateCache;
 	FString CachedLastMapName;
 	FString SaveSlotName = TEXT("Save_0");

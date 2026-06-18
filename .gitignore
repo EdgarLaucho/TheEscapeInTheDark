@@ -48,6 +48,10 @@ SourceArt/**/*.tga
 
 # Binary Files
 Binaries/*
+!Binaries/Win64/
+Binaries/Win64/*
+!Binaries/Win64/UnrealEditor-InTheDark.dll
+!Binaries/Win64/UnrealEditor.modules
 Plugins/**/Binaries/*
 
 # Builds

@@ -50,6 +50,7 @@ void UInTheDarkGameInstance::ResetCache()
 	CompanionPersonalityCache = FSavedCompanionPersonality();
 	WorldStateCache.Reset();
 	ClearedEncountersCache.Reset();
+	SeenDialoguesCache.Reset();
 	PlayerStateCache = FSavedPlayerState();
 	CachedLastMapName.Reset();
 }
@@ -354,6 +355,24 @@ void UInTheDarkGameInstance::UpdateCompanionPersonality(float Courage, float Anx
 
 // ── Encounters ────────────────────────────────────────────
 
+// ── Diálogos ──────────────────────────────────────────────
+
+bool UInTheDarkGameInstance::IsDialogueSeen(FName DialogueID) const
+{
+	return !DialogueID.IsNone() && SeenDialoguesCache.Contains(DialogueID);
+}
+
+void UInTheDarkGameInstance::MarkDialogueSeen(FName DialogueID)
+{
+	if (DialogueID.IsNone()) return;
+	const int32 SizeBefore = SeenDialoguesCache.Num();
+	SeenDialoguesCache.Add(DialogueID);
+	if (SeenDialoguesCache.Num() > SizeBefore)
+		bSaveDirty = true;
+}
+
+// ── Encounters ──────────────────────────────────────────────
+
 void UInTheDarkGameInstance::MarkEncounterCleared(FName EncounterId)
 {
 	if (EncounterId.IsNone()) return;
@@ -441,6 +460,9 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 
 	// Encuentros: TSet<FName> -> TArray<FName>
 	Payload.ClearedEncounters = ClearedEncountersCache.Array();
+
+	// Diálogos: TSet<FName> -> TArray<FName>
+	Payload.SeenDialogues = SeenDialoguesCache.Array();
 }
 
 void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payload)
@@ -467,6 +489,13 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 	for (const FName& Id : Payload.ClearedEncounters)
 	{
 		ClearedEncountersCache.Add(Id);
+	}
+
+	// Diálogos: TArray<FName> -> TSet<FName>
+	SeenDialoguesCache.Reset();
+	for (const FName& Id : Payload.SeenDialogues)
+	{
+		SeenDialoguesCache.Add(Id);
 	}
 }
 

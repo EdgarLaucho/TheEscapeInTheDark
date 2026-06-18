@@ -79,8 +79,8 @@ void USaveSlotEntryWidget::NativeOnInitialized()
 
 	// Left: text info
 	UVerticalBox* InfoCol = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-	TXT_SlotTitle = MakeText(TEXT("RANURA 1"), 13, SlotColors::Gold, true);
-	TXT_Status    = MakeText(TEXT("Nueva partida"), 11, SlotColors::White);
+	TXT_SlotTitle = MakeText(TEXT("SLOT 1"), 13, SlotColors::Gold, true);
+	TXT_Status    = MakeText(TEXT("New Game"), 11, SlotColors::White);
 	TXT_Status->SetAutoWrapText(true);
 	TXT_Date      = MakeText(TEXT(""), 10, SlotColors::Gray);
 
@@ -98,8 +98,8 @@ void USaveSlotEntryWidget::NativeOnInitialized()
 
 	// Right: buttons column
 	UVerticalBox* BtnCol = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-	BTN_Play  = MakeBtn(TEXT("JUGAR"),  false);
-	BTN_Reset = MakeBtn(TEXT("BORRAR"), true);
+	BTN_Play  = MakeBtn(TEXT("PLAY"),   false);
+	BTN_Reset = MakeBtn(TEXT("DELETE"), true);
 
 	BtnCol->AddChildToVerticalBox(BTN_Play);
 	if (UVerticalBoxSlot* S = BtnCol->AddChildToVerticalBox(BTN_Reset))
@@ -123,17 +123,17 @@ void USaveSlotEntryWidget::InitSlot(const FSaveSlotInfo& Info, UMainMenuWidget* 
 	bAwaitingConfirm = false;
 
 	TXT_SlotTitle->SetText(FText::FromString(
-		FString::Printf(TEXT("RANURA  %d"), Info.SlotIndex + 1)));
+		FString::Printf(TEXT("SLOT  %d"), Info.SlotIndex + 1)));
 
 	if (bIsEmpty)
 	{
-		TXT_Status->SetText(FText::FromString(TEXT("Nueva partida")));
+		TXT_Status->SetText(FText::FromString(TEXT("New Game")));
 		TXT_Date->SetVisibility(ESlateVisibility::Collapsed);
 		BTN_Reset->SetVisibility(ESlateVisibility::Collapsed);
 
 		// Reset BORRAR label in case it was in confirm state
 		if (UTextBlock* Lbl = Cast<UTextBlock>(BTN_Reset->GetChildAt(0)))
-			Lbl->SetText(FText::FromString(TEXT("BORRAR")));
+			Lbl->SetText(FText::FromString(TEXT("DELETE")));
 	}
 	else
 	{
