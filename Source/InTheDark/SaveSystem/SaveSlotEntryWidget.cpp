@@ -14,19 +14,19 @@
 
 namespace SlotColors
 {
-	const FLinearColor CardBG      = FLinearColor(0.06f, 0.05f, 0.09f, 0.95f);
-	const FLinearColor CardBGHover = FLinearColor(0.09f, 0.08f, 0.14f, 0.95f);
-	const FLinearColor Gold        = FLinearColor(0.85f, 0.68f, 0.25f, 1.f);
-	const FLinearColor White       = FLinearColor(0.9f,  0.88f, 0.85f, 1.f);
-	const FLinearColor Gray        = FLinearColor(0.5f,  0.48f, 0.45f, 1.f);
-	const FLinearColor BtnN        = FLinearColor(0.14f, 0.11f, 0.20f, 1.f);
-	const FLinearColor BtnH        = FLinearColor(0.28f, 0.23f, 0.42f, 1.f);
-	const FLinearColor BtnP        = FLinearColor(0.07f, 0.06f, 0.11f, 1.f);
-	const FLinearColor DangerN     = FLinearColor(0.28f, 0.04f, 0.04f, 1.f);
-	const FLinearColor DangerH     = FLinearColor(0.55f, 0.07f, 0.07f, 1.f);
-	const FLinearColor DangerP     = FLinearColor(0.14f, 0.02f, 0.02f, 1.f);
-	const FLinearColor ConfirmN    = FLinearColor(0.6f,  0.45f, 0.0f,  1.f);
-	const FLinearColor ConfirmH    = FLinearColor(0.85f, 0.65f, 0.0f,  1.f);
+	const FLinearColor CardBG      = FLinearColor(0.055f, 0.040f, 0.028f, 0.95f);
+	const FLinearColor CardBGHover = FLinearColor(0.085f, 0.062f, 0.042f, 0.95f);
+	const FLinearColor Gold        = FLinearColor(0.88f,  0.70f,  0.28f,  1.f);
+	const FLinearColor White       = FLinearColor(0.92f,  0.88f,  0.80f,  1.f);
+	const FLinearColor Gray        = FLinearColor(0.52f,  0.46f,  0.36f,  1.f);
+	const FLinearColor BtnN        = FLinearColor(0.100f, 0.075f, 0.050f, 1.f);
+	const FLinearColor BtnH        = FLinearColor(0.220f, 0.165f, 0.090f, 1.f);
+	const FLinearColor BtnP        = FLinearColor(0.050f, 0.038f, 0.025f, 1.f);
+	const FLinearColor DangerN     = FLinearColor(0.22f,  0.04f,  0.04f,  1.f);
+	const FLinearColor DangerH     = FLinearColor(0.45f,  0.07f,  0.07f,  1.f);
+	const FLinearColor DangerP     = FLinearColor(0.11f,  0.02f,  0.02f,  1.f);
+	const FLinearColor ConfirmN    = FLinearColor(0.55f,  0.42f,  0.00f,  1.f);
+	const FLinearColor ConfirmH    = FLinearColor(0.80f,  0.62f,  0.00f,  1.f);
 }
 
 UTextBlock* USaveSlotEntryWidget::MakeText(const FString& Txt, int32 Size, const FLinearColor& Color, bool bBold)
@@ -67,11 +67,17 @@ void USaveSlotEntryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
+	// Outline border (creates card border effect)
+	UBorder* OutlineBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), FName("Outline"));
+	OutlineBdr->SetBrushColor(FLinearColor(0.24f, 0.16f, 0.06f, 0.85f));
+	OutlineBdr->SetPadding(FMargin(1.f));
+	WidgetTree->RootWidget = OutlineBdr;
+
 	// Card background
 	UBorder* Card = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), FName("Card"));
 	Card->SetBrushColor(SlotColors::CardBG);
-	Card->SetPadding(FMargin(16.f, 12.f));
-	WidgetTree->RootWidget = Card;
+	Card->SetPadding(FMargin(16.f, 14.f));
+	OutlineBdr->SetContent(Card);
 
 	// Main row: info | buttons
 	UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
@@ -166,7 +172,7 @@ void USaveSlotEntryWidget::HandleResetClicked()
 		bAwaitingConfirm = true;
 		if (UTextBlock* Lbl = Cast<UTextBlock>(BTN_Reset->GetChildAt(0)))
 		{
-			Lbl->SetText(FText::FromString(TEXT("¿CONFIRMAR?")));
+			Lbl->SetText(FText::FromString(TEXT("CONFIRM?")));
 
 			FButtonStyle Style = BTN_Reset->GetStyle();
 			Style.Normal  = FSlateColorBrush(FSlateColor(SlotColors::ConfirmN));
