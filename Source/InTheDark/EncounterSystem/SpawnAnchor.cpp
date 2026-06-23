@@ -13,14 +13,14 @@
 
 namespace
 {
-	float GetSpawnFloorOffset(TSubclassOf<AActor> EnemyClass)
+	float GetEncounterSpawnFloorOffset(TSubclassOf<AActor> EnemyClass)
 	{
 		const AActor* ClassDefault = EnemyClass ? EnemyClass->GetDefaultObject<AActor>() : nullptr;
 		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
 		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
 	}
 
-	FTransform BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
+	FTransform BuildEncounterGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
 	{
 		FTransform Result = SourceTransform;
 		if (!World || !EnemyClass)
@@ -28,7 +28,7 @@ namespace
 			return Result;
 		}
 
-		const float FloorOffset = GetSpawnFloorOffset(EnemyClass);
+		const float FloorOffset = GetEncounterSpawnFloorOffset(EnemyClass);
 		if (FloorOffset <= 0.f)
 		{
 			return Result;
@@ -178,7 +178,7 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemyS
 	}
 
 	LastSpawnTimeSeconds = World->GetTimeSeconds();
-	const FTransform SpawnTransform = BuildGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
+	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
 
 	// Intenta obtener del ObjectPool primero.
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))

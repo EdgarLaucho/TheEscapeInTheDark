@@ -121,4 +121,5 @@ private:
 	void UnlockEntryGates();
 	void UnlockExitGates();
 	void UnlockGatesForClearedState();
+	void CheckInitialPlayerOverlap();
 };

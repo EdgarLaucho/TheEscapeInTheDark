@@ -15,14 +15,14 @@
 
 namespace
 {
-	float GetSpawnFloorOffset(TSubclassOf<AActor> EnemyClass)
+	float GetSpawnAreaFloorOffset(TSubclassOf<AActor> EnemyClass)
 	{
 		const AActor* ClassDefault = EnemyClass ? EnemyClass->GetDefaultObject<AActor>() : nullptr;
 		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
 		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
 	}
 
-	FTransform BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
+	FTransform BuildSpawnAreaGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
 	{
 		FTransform Result = SourceTransform;
 		if (!World || !EnemyClass)
@@ -30,7 +30,7 @@ namespace
 			return Result;
 		}
 
-		const float FloorOffset = GetSpawnFloorOffset(EnemyClass);
+		const float FloorOffset = GetSpawnAreaFloorOffset(EnemyClass);
 		if (FloorOffset <= 0.f)
 		{
 			return Result;
@@ -330,7 +330,7 @@ void ASpawnArea::TrySpawn()
 
 	if (!bFound) { return; }
 
-	SpawnTransform = BuildGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
+	SpawnTransform = BuildSpawnAreaGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
 
 	// Intentar adquirir del pool; si falla, spawn directo.
 	AActor* Spawned = nullptr;
