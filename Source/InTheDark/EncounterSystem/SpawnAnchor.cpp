@@ -4,11 +4,56 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+
+namespace
+{
+	float GetSpawnFloorOffset(TSubclassOf<AActor> EnemyClass)
+	{
+		const AActor* ClassDefault = EnemyClass ? EnemyClass->GetDefaultObject<AActor>() : nullptr;
+		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
+		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
+	}
+
+	FTransform BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
+	{
+		FTransform Result = SourceTransform;
+		if (!World || !EnemyClass)
+		{
+			return Result;
+		}
+
+		const float FloorOffset = GetSpawnFloorOffset(EnemyClass);
+		if (FloorOffset <= 0.f)
+		{
+			return Result;
+		}
+
+		FVector Location = Result.GetLocation();
+		const FVector TraceStart = Location + FVector(0.f, 0.f, FMath::Max(500.f, FloorOffset + 200.f));
+		const FVector TraceEnd = Location - FVector(0.f, 0.f, 5000.f);
+
+		FHitResult Hit;
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterSpawnGroundTrace), false);
+		if (IgnoredActor)
+		{
+			QueryParams.AddIgnoredActor(IgnoredActor);
+		}
+
+		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
+		{
+			Location.Z = Hit.ImpactPoint.Z + FloorOffset + 2.f;
+			Result.SetLocation(Location);
+		}
+
+		return Result;
+	}
+}
 
 ASpawnAnchor::ASpawnAnchor()
 {
@@ -133,13 +178,14 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemyS
 	}
 
 	LastSpawnTimeSeconds = World->GetTimeSeconds();
+	const FTransform SpawnTransform = BuildGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
 
 	// Intenta obtener del ObjectPool primero.
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
 	{
 		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
 		{
-			AActor* Acquired = Pool->AcquireFromPool(this, EnemyClass, GetActorTransform());
+			AActor* Acquired = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform);
 			if (Acquired)
 			{
 				return Acquired;
@@ -153,7 +199,7 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemyS
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	Params.Owner = GetOwner();
 
-	AActor* Spawned = World->SpawnActor<AActor>(EnemyClass, GetActorTransform(), Params);
+	AActor* Spawned = World->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params);
 	if (!Spawned)
 	{
 		UE_LOG(LogTemp, Error, TEXT("ASpawnAnchor::PerformSpawn: SpawnActor returned null for %s"),
