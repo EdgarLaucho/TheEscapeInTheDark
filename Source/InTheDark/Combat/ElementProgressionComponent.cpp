@@ -101,19 +101,41 @@ void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 Kil
 	if (Data-> Level >= Data->MaxLevel)
 		return;
 	
+	const int32 PreviousLevel = Data->Level;
 
+	auto NotifyUI = [this, Data, ElementName, PreviousLevel]()
+	{
+		OnElementProgressChanged.Broadcast(ElementName, *Data);
+
+		if (Data->Level > PreviousLevel)
+		{
+			OnElementLevelUp.Broadcast(
+				ElementName,
+				PreviousLevel,
+				Data->Level
+			);
+		}
+	};
+	
 	Data->KillCount += KillAmount;
 	while (Data->Level < Data->MaxLevel)
 	{
 		const int32 RequiredIndex = Data->Level-1;
 
 		if (!Data->KillsRequiredPerLevel.IsValidIndex(RequiredIndex))
+		{
+			NotifyUI();
 			return;
+		}
+			
 
 		const int32 RequiredKills = Data->KillsRequiredPerLevel[RequiredIndex];
 
 		if (Data->KillCount<RequiredKills)
+		{
+			NotifyUI();
 			return;
+		}
 
 		Data->KillCount -= RequiredKills;
 		Data->Level++;
@@ -128,6 +150,7 @@ void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 Kil
 	{
 		GI->UpdateElementProgression(MakeSavedEntry(*Data));
 	}
+	NotifyUI();
 }
 
 const TArray<FElementProgressionData>& UElementProgressionComponent::GetAllElementProgressionData() const

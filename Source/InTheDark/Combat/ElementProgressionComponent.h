@@ -41,6 +41,18 @@ struct FElementProgressionData
 	
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnElementProgressChanged,
+	FName, ElementName,
+	FElementProgressionData, ProgressionData
+);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FOnElementLevelUp,
+	FName, ElementName,
+	int32, PreviousLevel,
+	int32, NewLevel
+);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class INTHEDARK_API UElementProgressionComponent : public UActorComponent
@@ -58,6 +70,12 @@ public:
 
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="ElementProgression")
 	TArray<FElementProgressionData> ElementProgressionData;
+
+	UPROPERTY(BlueprintAssignable, Category="ElementProgression|Events")
+	FOnElementProgressChanged OnElementProgressChanged;
+
+	UPROPERTY(BlueprintAssignable, Category="ElementProgression|Events")
+	FOnElementLevelUp OnElementLevelUp;
 
 	UFUNCTION(BlueprintCallable, Category="ElementProgression")
 	TArray<FName> GetUnlockedElements() const;
