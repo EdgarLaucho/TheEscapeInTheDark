@@ -101,6 +101,7 @@ private:
 		TWeakObjectPtr<ASpawnAnchor> Anchor;
 		FEnemySpawn Directive;
 		FTimerHandle TimerHandle;
+		int32 RetryCount = 0;
 	};
 	TArray<FPendingSpawn> PendingSpawns;
 
@@ -134,7 +135,10 @@ private:
 	ACombatArena* GetArena() const;
 	UEncounterConfig* GetConfig() const;
 	const FEncounterWave* GetCurrentWave() const;
-	TArray<ASpawnAnchor*> GetAvailableAnchorsForDirective(const FEnemySpawn& Directive) const;
+	TArray<ASpawnAnchor*> GetAvailableAnchorsForDirective(
+		const FEnemySpawn& Directive,
+		TSubclassOf<AActor> EnemyClass,
+		const TSet<ASpawnAnchor*>* ReservedAnchors = nullptr) const;
 	AActor* GetPlayerActor() const;
 
 	/** Dispara un cue de banter. Los tags nulos se ignoran. */

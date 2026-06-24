@@ -10,19 +10,35 @@
 #include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Engine/OverlapResult.h"
 
 namespace
 {
 	float GetEncounterSpawnFloorOffset(TSubclassOf<AActor> EnemyClass)
 	{
-		const AActor* ClassDefault = EnemyClass ? EnemyClass->GetDefaultObject<AActor>() : nullptr;
+		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
 		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
 		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
+	}
+
+	void GetEncounterSpawnCapsule(TSubclassOf<AActor> EnemyClass, float& OutRadius, float& OutHalfHeight)
+	{
+		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
+		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
+		OutRadius = Capsule ? Capsule->GetScaledCapsuleRadius() : 80.f;
+		OutHalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 120.f;
+	}
+
+	FVector GetEncounterSpawnDefaultScale(TSubclassOf<AActor> EnemyClass)
+	{
+		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
+		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
 	}
 
 	FTransform BuildEncounterGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
 	{
 		FTransform Result = SourceTransform;
+		Result.SetScale3D(GetEncounterSpawnDefaultScale(EnemyClass));
 		if (!World || !EnemyClass)
 		{
 			return Result;
@@ -127,6 +143,53 @@ bool ASpawnAnchor::IsAvailableForSpawn(const AActor* PlayerActor) const
 	return true;
 }
 
+bool ASpawnAnchor::IsSpawnLocationOccupied(TSubclassOf<AActor> EnemyClass) const
+{
+	UWorld* World = GetWorld();
+	if (!World || !EnemyClass)
+	{
+		return false;
+	}
+
+	float Radius = 0.f;
+	float HalfHeight = 0.f;
+	GetEncounterSpawnCapsule(EnemyClass, Radius, HalfHeight);
+
+	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(
+		World, EnemyClass, GetActorTransform(), this);
+
+	TArray<FOverlapResult> Overlaps;
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterSpawnOccupancy), false);
+	QueryParams.AddIgnoredActor(this);
+
+	const bool bHasOverlap = World->OverlapMultiByObjectType(
+		Overlaps,
+		SpawnTransform.GetLocation(),
+		FQuat::Identity,
+		ObjectQueryParams,
+		FCollisionShape::MakeCapsule(Radius, HalfHeight),
+		QueryParams);
+
+	if (!bHasOverlap)
+	{
+		return false;
+	}
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		const AActor* Other = Overlap.GetActor();
+		if (Other && Other != this && !Other->IsActorBeingDestroyed())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 float ASpawnAnchor::ResolveLead(const FEnemySpawn& Directive) const
 {
 	return Directive.PreSpawnLead > 0.f ? Directive.PreSpawnLead : DefaultLeadTime;
@@ -179,6 +242,12 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemyS
 
 	LastSpawnTimeSeconds = World->GetTimeSeconds();
 	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
+	if (IsSpawnLocationOccupied(EnemyClass))
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("ASpawnAnchor::PerformSpawn: anchor '%s' is occupied; skipping %s"),
+			*GetName(), *EnemyClass->GetName());
+		return nullptr;
+	}
 
 	// Intenta obtener del ObjectPool primero.
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))

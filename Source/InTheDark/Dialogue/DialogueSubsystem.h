@@ -8,17 +8,33 @@
 class UDialogueWidget;
 class APlayerController;
 
+UENUM(BlueprintType)
+enum class EDialoguePlaybackMode : uint8
+{
+	Interactive UMETA(DisplayName = "Interactive"),
+	Ambient UMETA(DisplayName = "Ambient")
+};
+
 UCLASS()
 class INTHEDARK_API UDialogueSubsystem : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
 
 public:
-	/** Inicia el diálogo. No hace nada si ya hay uno activo o si DialogueData está vacío. */
+	/** Starts the classic click-through dialogue that locks player input. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void StartDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC);
 
-	/** Avanza a la siguiente línea. Si era la última, cierra el diálogo. */
+	/** Starts a narrated dialogue that keeps gameplay input active and advances automatically. */
+	UFUNCTION(BlueprintCallable, Category = "Dialogue")
+	void StartAmbientDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC,
+		bool bMarkSeen = true, float LineHoldSeconds = 2.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "Dialogue")
+	void StartDialogueWithMode(UDialogueData* Data, FName DialogueID, APlayerController* PC,
+		EDialoguePlaybackMode PlaybackMode, bool bMarkSeen = true, float LineHoldSeconds = 2.0f);
+
+	/** Advances to the next line. If this was the last line, closes the dialogue. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void AdvanceLine();
 
@@ -30,6 +46,9 @@ private:
 
 	UFUNCTION()
 	void HandleAdvanceRequested();
+
+	UFUNCTION()
+	void HandleLineFinishedRevealing();
 
 	void SaveAndMarkSeen();
 
@@ -44,5 +63,13 @@ private:
 
 	FName ActiveDialogueID;
 	int32 CurrentLineIndex = 0;
-	bool  bActive          = false;
+	bool bActive = false;
+	bool bMarkSeenOnEnd = true;
+	bool bSaveCheckpointOnEnd = true;
+	EDialoguePlaybackMode ActivePlaybackMode = EDialoguePlaybackMode::Interactive;
+	FTimerHandle AmbientAdvanceTimer;
+	float ActiveAmbientLineHoldSeconds = 2.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Dialogue|Ambient")
+	float DefaultAmbientLineHoldSeconds = 2.0f;
 };

@@ -26,7 +26,7 @@ void UDialogueWidget::BuildLayout()
 	WidgetTree->RootWidget = Root;
 
 	// ── Layer 0: transparent full-screen click catcher ────────────────────
-	UButton* ClickCatcher = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+	ClickCatcher = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
 	FButtonStyle EmptyStyle;
 	EmptyStyle.Normal         = FSlateNoResource();
 	EmptyStyle.Hovered        = FSlateNoResource();
@@ -120,13 +120,39 @@ void UDialogueWidget::BuildLayout()
 	}
 
 	// ── Hint ──────────────────────────────────────────────────────────────
-	UTextBlock* HintText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	HintText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	HintText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 	HintText->SetColorAndOpacity(FSlateColor(FLinearColor(0.40f, 0.30f, 0.14f, 1.f)));
 	HintText->SetText(FText::FromString(TEXT("[ click to advance ]")));
 	HintText->SetJustification(ETextJustify::Right);
 	if (UVerticalBoxSlot* VS = VBox->AddChildToVerticalBox(HintText))
 		VS->SetHorizontalAlignment(HAlign_Fill);
+}
+
+void UDialogueWidget::SetClickToAdvanceEnabled(bool bEnabled)
+{
+	bClickToAdvanceEnabled = bEnabled;
+
+	if (WidgetTree && WidgetTree->RootWidget)
+	{
+		WidgetTree->RootWidget->SetVisibility(bClickToAdvanceEnabled
+			? ESlateVisibility::Visible
+			: ESlateVisibility::HitTestInvisible);
+	}
+
+	if (ClickCatcher)
+	{
+		ClickCatcher->SetVisibility(bClickToAdvanceEnabled
+			? ESlateVisibility::Visible
+			: ESlateVisibility::HitTestInvisible);
+	}
+
+	if (HintText)
+	{
+		HintText->SetVisibility(bClickToAdvanceEnabled
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Collapsed);
+	}
 }
 
 void UDialogueWidget::ShowLine(const FDialogueLine& Line)
@@ -168,10 +194,14 @@ void UDialogueWidget::FinishTypewriter()
 
 	if (DialogueText)
 		DialogueText->SetText(FText::FromString(FullLineText));
+
+	OnLineFinishedRevealing.Broadcast();
 }
 
 void UDialogueWidget::HandleClick()
 {
+	if (!bClickToAdvanceEnabled) return;
+
 	if (bTypewriterActive)
 		FinishTypewriter();
 	else

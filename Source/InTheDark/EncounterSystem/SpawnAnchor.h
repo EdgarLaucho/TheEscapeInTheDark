@@ -72,6 +72,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Anchor")
 	bool IsAvailableForSpawn(const AActor* PlayerActor) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Anchor")
+	bool IsSpawnLocationOccupied(TSubclassOf<AActor> EnemyClass) const;
+
 	/**
 	 * Spawnea el enemigo usando el ObjectPool si está disponible, o SpawnActor directamente.
 	 * No reproduce el telegrafeo — el director gestiona el timing.
