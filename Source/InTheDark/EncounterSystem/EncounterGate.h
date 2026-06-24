@@ -9,8 +9,8 @@ class UNiagaraComponent;
 
 /**
  * Barrera de bloqueo de paso que el encuentro cierra mientras hay una oleada activa.
- * Bloquea solo al jugador. El mesh gestiona tanto la colisión como la visibilidad.
- * La lógica visual (animación de apertura) se implementa en el Blueprint derivado.
+ * Bloquea solo al jugador. La colision se controla aqui; la animacion visual
+ * se implementa en el Blueprint derivado moviendo el mesh.
  */
 UCLASS(Blueprintable, BlueprintType)
 class INTHEDARK_API AEncounterGate : public AActor
@@ -53,5 +53,21 @@ private:
 	UPROPERTY(Transient)
 	bool bLocked = false;
 
+	UPROPERTY(Transient)
+	FVector ClosedRelativeLocation = FVector::ZeroVector;
+
+	FTimerHandle GateMoveTimerHandle;
+	FVector MoveStartRelativeLocation = FVector::ZeroVector;
+	FVector MoveTargetRelativeLocation = FVector::ZeroVector;
+	float MoveElapsedSeconds = 0.f;
+	float MoveDurationSeconds = 0.f;
+
 	void ApplyLockState();
+	void SnapGateToState(bool bClosed);
+	void StartGateMove(bool bClosed);
+	void UpdateGateMove();
+	void SetGateCollisionEnabled(bool bEnabled);
+	FVector GetOpenRelativeLocation() const;
+	float GetConfiguredSinkDepthOffset() const;
+	float GetConfiguredSinkTime() const;
 };

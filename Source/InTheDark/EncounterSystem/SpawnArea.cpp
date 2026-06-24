@@ -7,10 +7,62 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "NavigationSystem.h"
 #include "TimerManager.h"
+
+namespace
+{
+	float GetSpawnAreaFloorOffset(TSubclassOf<AActor> EnemyClass)
+	{
+		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
+		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
+		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
+	}
+
+	FVector GetSpawnAreaDefaultScale(TSubclassOf<AActor> EnemyClass)
+	{
+		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
+		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
+	}
+
+	FTransform BuildSpawnAreaGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
+	{
+		FTransform Result = SourceTransform;
+		Result.SetScale3D(GetSpawnAreaDefaultScale(EnemyClass));
+		if (!World || !EnemyClass)
+		{
+			return Result;
+		}
+
+		const float FloorOffset = GetSpawnAreaFloorOffset(EnemyClass);
+		if (FloorOffset <= 0.f)
+		{
+			return Result;
+		}
+
+		FVector Location = Result.GetLocation();
+		const FVector TraceStart = Location + FVector(0.f, 0.f, FMath::Max(500.f, FloorOffset + 200.f));
+		const FVector TraceEnd = Location - FVector(0.f, 0.f, 5000.f);
+
+		FHitResult Hit;
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SpawnAreaGroundTrace), false);
+		if (IgnoredActor)
+		{
+			QueryParams.AddIgnoredActor(IgnoredActor);
+		}
+
+		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
+		{
+			Location.Z = Hit.ImpactPoint.Z + FloorOffset + 2.f;
+			Result.SetLocation(Location);
+		}
+
+		return Result;
+	}
+}
 
 ASpawnArea::ASpawnArea()
 {
@@ -284,6 +336,8 @@ void ASpawnArea::TrySpawn()
 	}
 
 	if (!bFound) { return; }
+
+	SpawnTransform = BuildSpawnAreaGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
 
 	// Intentar adquirir del pool; si falla, spawn directo.
 	AActor* Spawned = nullptr;
