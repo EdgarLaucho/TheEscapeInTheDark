@@ -180,7 +180,10 @@ void UEncounterDirectorComponent::BeginWaveActuallyNow()
 	}
 }
 
-TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirective(const FEnemySpawn& Directive) const
+TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirective(
+	const FEnemySpawn& Directive,
+	TSubclassOf<AActor> EnemyClass,
+	const TSet<ASpawnAnchor*>* ReservedAnchors) const
 {
 	TArray<ASpawnAnchor*> Out;
 	const ACombatArena* Arena = GetArena();
@@ -191,11 +194,19 @@ TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirecti
 	for (const TObjectPtr<ASpawnAnchor>& A : Arena->Anchors)
 	{
 		if (!A) { continue; }
+		if (ReservedAnchors && ReservedAnchors->Contains(A.Get()))
+		{
+			continue;
+		}
 		if (Directive.AnchorTag.IsValid() && !A->AnchorTags.HasTag(Directive.AnchorTag))
 		{
 			continue;
 		}
 		if (!A->IsAvailableForSpawn(Player))
+		{
+			continue;
+		}
+		if (EnemyClass && A->IsSpawnLocationOccupied(EnemyClass))
 		{
 			continue;
 		}
@@ -209,6 +220,8 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 	UWorld* World = GetWorld();
 	if (!World) { return; }
 
+	TSet<ASpawnAnchor*> ReservedAnchors;
+
 	for (const FEnemySpawn& Directive : Wave.Spawns)
 	{
 		if (Directive.Enemy.IsNull())
@@ -221,17 +234,19 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 
 		for (int32 i = 0; i < FMath::Max(1, Directive.Count); ++i)
 		{
-			TArray<ASpawnAnchor*> Candidates = GetAvailableAnchorsForDirective(Directive);
+			TArray<ASpawnAnchor*> Candidates = GetAvailableAnchorsForDirective(Directive, EnemyCls, &ReservedAnchors);
 			if (Candidates.Num() == 0)
 			{
-				// Fallback: cualquier anchor con el tag, ignorando FOV/distancia.
+				// Fallback: cualquier anchor con el tag, ignorando FOV/distancia, pero nunca ocupacion/reserva.
 				const ACombatArena* Arena = GetArena();
 				if (Arena)
 				{
 					for (const TObjectPtr<ASpawnAnchor>& A : Arena->Anchors)
 					{
 						if (!A) continue;
+						if (ReservedAnchors.Contains(A.Get())) continue;
 						if (Directive.AnchorTag.IsValid() && !A->AnchorTags.HasTag(Directive.AnchorTag)) continue;
+						if (A->IsSpawnLocationOccupied(EnemyCls)) continue;
 						Candidates.Add(A);
 					}
 				}
@@ -244,6 +259,7 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 			}
 
 			ASpawnAnchor* Picked = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+			ReservedAnchors.Add(Picked);
 			const float Lead = Picked->ResolveLead(Directive);
 
 			Picked->PlayTelegraph(Directive);
@@ -275,6 +291,32 @@ void UEncounterDirectorComponent::ExecutePendingSpawn(int32 PendingIndex)
 
 	FPendingSpawn& Pending = PendingSpawns[PendingIndex];
 	if (!Pending.Anchor.IsValid() || !Pending.EnemyClass) { return; }
+
+	if (Pending.Anchor->IsSpawnLocationOccupied(Pending.EnemyClass))
+	{
+		TArray<ASpawnAnchor*> Candidates = GetAvailableAnchorsForDirective(Pending.Directive, Pending.EnemyClass);
+		if (Candidates.Num() > 0)
+		{
+			Pending.Anchor = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+		}
+		else if (Pending.RetryCount < 10)
+		{
+			++Pending.RetryCount;
+			if (UWorld* World = GetWorld())
+			{
+				FTimerDelegate TimerDel;
+				TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, PendingIndex);
+				World->GetTimerManager().SetTimer(Pending.TimerHandle, TimerDel, 0.35f, false);
+			}
+			return;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: skipping spawn for %s; no free anchor after retries."),
+				*Pending.EnemyClass->GetName());
+			return;
+		}
+	}
 
 	AActor* Spawned = Pending.Anchor->PerformSpawn(Pending.EnemyClass, Pending.Directive);
 	TrackSpawnedEnemy(Spawned);

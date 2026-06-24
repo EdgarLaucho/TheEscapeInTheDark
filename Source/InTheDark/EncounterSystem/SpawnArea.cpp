@@ -17,14 +17,14 @@ namespace
 {
 	float GetSpawnAreaFloorOffset(TSubclassOf<AActor> EnemyClass)
 	{
-		const AActor* ClassDefault = EnemyClass ? EnemyClass->GetDefaultObject<AActor>() : nullptr;
+		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
 		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
 		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
 	}
 
 	FVector GetSpawnAreaDefaultScale(TSubclassOf<AActor> EnemyClass)
 	{
-		const AActor* ClassDefault = EnemyClass ? EnemyClass->GetDefaultObject<AActor>() : nullptr;
+		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
 		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
 	}
 

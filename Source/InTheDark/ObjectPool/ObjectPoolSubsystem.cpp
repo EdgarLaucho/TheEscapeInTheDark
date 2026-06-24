@@ -17,7 +17,7 @@ namespace
 {
 	FVector GetClassDefaultActorScale(TSubclassOf<AActor> ActorClass)
 	{
-		const AActor* ClassDefault = ActorClass ? ActorClass->GetDefaultObject<AActor>() : nullptr;
+		const AActor* ClassDefault = ActorClass ? Cast<AActor>(ActorClass->GetDefaultObject()) : nullptr;
 		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
 	}
 
@@ -35,7 +35,7 @@ namespace
 			return;
 		}
 
-		const AActor* ClassDefault = Actor->GetClass() ? Actor->GetClass()->GetDefaultObject<AActor>() : nullptr;
+		const AActor* ClassDefault = Actor->GetClass() ? Cast<AActor>(Actor->GetClass()->GetDefaultObject()) : nullptr;
 		if (!ClassDefault)
 		{
 			return;
