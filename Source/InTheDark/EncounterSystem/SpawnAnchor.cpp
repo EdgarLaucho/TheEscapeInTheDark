@@ -20,9 +20,16 @@ namespace
 		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
 	}
 
+	FVector GetEncounterSpawnDefaultScale(TSubclassOf<AActor> EnemyClass)
+	{
+		const AActor* ClassDefault = EnemyClass ? EnemyClass->GetDefaultObject<AActor>() : nullptr;
+		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
+	}
+
 	FTransform BuildEncounterGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
 	{
 		FTransform Result = SourceTransform;
+		Result.SetScale3D(GetEncounterSpawnDefaultScale(EnemyClass));
 		if (!World || !EnemyClass)
 		{
 			return Result;

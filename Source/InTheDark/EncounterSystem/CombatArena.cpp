@@ -49,7 +49,6 @@ void ACombatArena::BeginPlay()
 	if (TriggerVolume && bAutoStartOnOverlap)
 	{
 		TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &ACombatArena::HandleTriggerOverlap);
-		GetWorldTimerManager().SetTimerForNextTick(this, &ACombatArena::CheckInitialPlayerOverlap);
 	}
 
 	if (Director)
@@ -127,21 +126,6 @@ void ACombatArena::HandleTriggerOverlap(UPrimitiveComponent*, AActor* Other, UPr
 	if (!PlayerPawn || Other != PlayerPawn) { return; }
 
 	RequestStart();
-}
-
-void ACombatArena::CheckInitialPlayerOverlap()
-{
-	if (bAlreadyStartedThisSession || !TriggerVolume || !bAutoStartOnOverlap)
-	{
-		return;
-	}
-
-	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
-	AActor* PlayerPawn = PC ? PC->GetPawn() : nullptr;
-	if (PlayerPawn && TriggerVolume->IsOverlappingActor(PlayerPawn))
-	{
-		RequestStart();
-	}
 }
 
 void ACombatArena::RequestStart()

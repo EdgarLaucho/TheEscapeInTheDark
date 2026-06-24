@@ -8,9 +8,65 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AIController.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SceneComponent.h"
 #include "Containers/Ticker.h"
 #include "HAL/IConsoleManager.h"
 #include "UObject/UObjectIterator.h"
+
+namespace
+{
+	FVector GetClassDefaultActorScale(TSubclassOf<AActor> ActorClass)
+	{
+		const AActor* ClassDefault = ActorClass ? ActorClass->GetDefaultObject<AActor>() : nullptr;
+		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
+	}
+
+	FTransform BuildPoolActivationTransform(TSubclassOf<AActor> ActorClass, const FTransform& SourceTransform)
+	{
+		FTransform Result = SourceTransform;
+		Result.SetScale3D(GetClassDefaultActorScale(ActorClass));
+		return Result;
+	}
+
+	void RestoreSceneComponentScalesFromClassDefaults(AActor* Actor)
+	{
+		if (!Actor)
+		{
+			return;
+		}
+
+		const AActor* ClassDefault = Actor->GetClass() ? Actor->GetClass()->GetDefaultObject<AActor>() : nullptr;
+		if (!ClassDefault)
+		{
+			return;
+		}
+
+		TArray<USceneComponent*> DefaultComponents;
+		ClassDefault->GetComponents<USceneComponent>(DefaultComponents);
+
+		TMap<FName, const USceneComponent*> DefaultsByName;
+		for (const USceneComponent* DefaultComponent : DefaultComponents)
+		{
+			if (DefaultComponent)
+			{
+				DefaultsByName.Add(DefaultComponent->GetFName(), DefaultComponent);
+			}
+		}
+
+		TArray<USceneComponent*> InstanceComponents;
+		Actor->GetComponents<USceneComponent>(InstanceComponents);
+		for (USceneComponent* InstanceComponent : InstanceComponents)
+		{
+			const USceneComponent* const* DefaultComponent = InstanceComponent
+				? DefaultsByName.Find(InstanceComponent->GetFName())
+				: nullptr;
+			if (DefaultComponent && *DefaultComponent)
+			{
+				InstanceComponent->SetRelativeScale3D((*DefaultComponent)->GetRelativeScale3D());
+			}
+		}
+	}
+}
 
 void UObjectPoolSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -367,9 +423,11 @@ AActor* UObjectPoolSubsystem::CreatePooledActor(UWorld* World, TSubclassOf<AActo
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	AActor* Actor = World->SpawnActor<AActor>(ActorClass, Transform, SpawnParams);
+	const FTransform SpawnTransform = BuildPoolActivationTransform(ActorClass, Transform);
+	AActor* Actor = World->SpawnActor<AActor>(ActorClass, SpawnTransform, SpawnParams);
 	if (Actor)
 	{
+		RestoreSceneComponentScalesFromClassDefaults(Actor);
 		FObjectPool& Pool = Pools.FindOrAdd(ActorClass);
 		Pool.TotalCreated++;
 	}
@@ -422,7 +480,9 @@ void UObjectPoolSubsystem::ActivateActor(AActor* Actor, const FTransform& Transf
 		return;
 	}
 
-	Actor->SetActorTransform(Transform);
+	const FTransform ActivationTransform = BuildPoolActivationTransform(Actor->GetClass(), Transform);
+	Actor->SetActorTransform(ActivationTransform);
+	RestoreSceneComponentScalesFromClassDefaults(Actor);
 	Actor->SetActorHiddenInGame(false);
 	Actor->SetActorEnableCollision(true);
 	Actor->SetActorTickEnabled(true);
@@ -442,6 +502,7 @@ void UObjectPoolSubsystem::ActivateActor(AActor* Actor, const FTransform& Transf
 					Mesh->SetRelativeLocationAndRotation(
 						CDOMesh->GetRelativeLocation(),
 						CDOMesh->GetRelativeRotation());
+					Mesh->SetRelativeScale3D(CDOMesh->GetRelativeScale3D());
 				}
 			}
 		}
