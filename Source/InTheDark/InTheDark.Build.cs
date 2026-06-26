@@ -14,6 +14,7 @@ public class InTheDark : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
+			"EnhancedInput",
 			"UMG",
 			"SlateCore"
 		});
