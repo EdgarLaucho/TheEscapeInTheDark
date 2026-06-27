@@ -10,6 +10,7 @@ void APlayerTutorialManager::BeginPlay()
 	Super::BeginPlay();
 
 	CurrentStep = 0;
+	SavedTutorialStep = CurrentStep;
 	bTutorialFinished = false;
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
@@ -46,6 +47,7 @@ void APlayerTutorialManager::NextStep()
 	}
 
 	CurrentStep++;
+	SavedTutorialStep = CurrentStep;
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
@@ -215,9 +217,36 @@ void APlayerTutorialManager::FinishTutorial()
 	}
 
 	bTutorialFinished = true;
+	SavedTutorialStep = CurrentStep;
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
 
 	OnTutorialFinished.Broadcast();
+}
+
+void APlayerTutorialManager::ApplyLoadedTutorialState(int32 LoadedStep, bool bLoadedTutorialFinished)
+{
+	bTutorialFinished = bLoadedTutorialFinished;
+	CurrentStep = FMath::Clamp(LoadedStep, 0, TutorialSteps.Num());
+	SavedTutorialStep = CurrentStep;
+
+	bControlPressed = false;
+	AutoAdvanceTimer = 0.0f;
+	HeldActions.Empty();
+
+	if (bTutorialFinished)
+	{
+		OnTutorialFinished.Broadcast();
+		return;
+	}
+
+	if (IsValidCurrentStep())
+	{
+		ShowStep();
+	}
+	else
+	{
+		FinishTutorial();
+	}
 }

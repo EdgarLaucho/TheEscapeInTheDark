@@ -71,8 +71,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
 	bool bControlPressed = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Save")
 	bool bTutorialFinished = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial|Save")
+	int32 SavedTutorialStep = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
 	bool bUsingGamepad = false;
@@ -148,6 +151,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Tutorial")
 	FText GetCurrentStepDisplayText() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Tutorial|Save")
+	void ApplyLoadedTutorialState(int32 LoadedStep, bool bLoadedTutorialFinished);
+	
 
 private:
 	UPROPERTY()
