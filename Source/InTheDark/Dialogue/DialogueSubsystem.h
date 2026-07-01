@@ -21,18 +21,19 @@ class INTHEDARK_API UDialogueSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	/** Starts the classic click-through dialogue that locks player input. */
+	/** Starts a dialogue. LineHoldSeconds <= 0 keeps click-to-advance; > 0 auto-advances each line. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
-	void StartDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC);
+	void StartDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC, float LineHoldSeconds = 0.0f);
 
 	/** Starts a narrated dialogue that keeps gameplay input active and advances automatically. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void StartAmbientDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC,
-		bool bMarkSeen = true, float LineHoldSeconds = 2.0f);
+		bool bMarkSeen = true, float LineHoldSeconds = 2.0f, bool bBlockMovement = false);
 
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void StartDialogueWithMode(UDialogueData* Data, FName DialogueID, APlayerController* PC,
-		EDialoguePlaybackMode PlaybackMode, bool bMarkSeen = true, float LineHoldSeconds = 2.0f);
+		EDialoguePlaybackMode PlaybackMode, bool bMarkSeen = true, float LineHoldSeconds = 2.0f,
+		bool bBlockMovement = false);
 
 	/** Advances to the next line. If this was the last line, closes the dialogue. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
@@ -50,6 +51,8 @@ private:
 	UFUNCTION()
 	void HandleLineFinishedRevealing();
 
+	float GetHoldSecondsForCurrentLine() const;
+
 	void SaveAndMarkSeen();
 
 	UPROPERTY()
@@ -66,6 +69,7 @@ private:
 	bool bActive = false;
 	bool bMarkSeenOnEnd = true;
 	bool bSaveCheckpointOnEnd = true;
+	bool bBlockedMovementForActiveDialogue = false;
 	EDialoguePlaybackMode ActivePlaybackMode = EDialoguePlaybackMode::Interactive;
 	FTimerHandle AmbientAdvanceTimer;
 	float ActiveAmbientLineHoldSeconds = 2.0f;

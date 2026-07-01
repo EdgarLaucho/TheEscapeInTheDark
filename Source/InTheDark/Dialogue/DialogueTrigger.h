@@ -37,6 +37,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
 	bool bMarkSeenOnComplete = true;
 
+	/** If true, this ambient trigger auto-advances but locks player movement until it ends. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
+	bool bBlockMovementDuringDialogue = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue", meta = (ClampMin = "0.0"))
 	float LineHoldSeconds = 2.0f;
 

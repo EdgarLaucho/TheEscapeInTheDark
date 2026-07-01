@@ -10,9 +10,16 @@
 #include "SaveSystem/InTheDarkGameInstance.h"
 #include "SaveSystem/SaveTypes.h"
 
-void UDialogueSubsystem::StartDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC)
+void UDialogueSubsystem::StartDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC, float LineHoldSeconds)
 {
-	StartDialogueWithMode(Data, DialogueID, PC, EDialoguePlaybackMode::Interactive, true);
+	const bool bAutoAdvance = LineHoldSeconds > 0.0f;
+	StartDialogueWithMode(
+		Data,
+		DialogueID,
+		PC,
+		bAutoAdvance ? EDialoguePlaybackMode::Ambient : EDialoguePlaybackMode::Interactive,
+		true,
+		LineHoldSeconds);
 }
 
 void UDialogueSubsystem::StartAmbientDialogue(
@@ -20,9 +27,10 @@ void UDialogueSubsystem::StartAmbientDialogue(
 	FName DialogueID,
 	APlayerController* PC,
 	bool bMarkSeen,
-	float LineHoldSeconds)
+	float LineHoldSeconds,
+	bool bBlockMovement)
 {
-	StartDialogueWithMode(Data, DialogueID, PC, EDialoguePlaybackMode::Ambient, bMarkSeen, LineHoldSeconds);
+	StartDialogueWithMode(Data, DialogueID, PC, EDialoguePlaybackMode::Ambient, bMarkSeen, LineHoldSeconds, bBlockMovement);
 }
 
 void UDialogueSubsystem::StartDialogueWithMode(
@@ -31,9 +39,13 @@ void UDialogueSubsystem::StartDialogueWithMode(
 	APlayerController* PC,
 	EDialoguePlaybackMode PlaybackMode,
 	bool bMarkSeen,
-	float LineHoldSeconds)
+	float LineHoldSeconds,
+	bool bBlockMovement)
 {
 	if (!Data || Data->Lines.IsEmpty() || !PC || bActive) return;
+
+	const bool bInteractive = PlaybackMode == EDialoguePlaybackMode::Interactive;
+	const bool bShouldBlockMovement = bInteractive || bBlockMovement;
 
 	ActiveData = Data;
 	ActivePC = PC;
@@ -42,20 +54,20 @@ void UDialogueSubsystem::StartDialogueWithMode(
 	CurrentLineIndex = 0;
 	bActive = true;
 	bMarkSeenOnEnd = bMarkSeen;
-	bSaveCheckpointOnEnd = PlaybackMode == EDialoguePlaybackMode::Interactive;
+	bSaveCheckpointOnEnd = bInteractive;
+	bBlockedMovementForActiveDialogue = bShouldBlockMovement;
 	ActiveAmbientLineHoldSeconds = LineHoldSeconds > 0.f ? LineHoldSeconds : DefaultAmbientLineHoldSeconds;
 
 	Widget = CreateWidget<UDialogueWidget>(PC, UDialogueWidget::StaticClass());
 	if (Widget)
 	{
-		const bool bInteractive = PlaybackMode == EDialoguePlaybackMode::Interactive;
 		Widget->SetClickToAdvanceEnabled(bInteractive);
 		Widget->OnAdvanceRequested.AddDynamic(this, &UDialogueSubsystem::HandleAdvanceRequested);
 		Widget->OnLineFinishedRevealing.AddDynamic(this, &UDialogueSubsystem::HandleLineFinishedRevealing);
 		Widget->AddToViewport(10);
 	}
 
-	if (PlaybackMode == EDialoguePlaybackMode::Interactive)
+	if (bShouldBlockMovement)
 	{
 		if (ACharacter* Char = Cast<ACharacter>(PC->GetPawn()))
 		{
@@ -65,7 +77,10 @@ void UDialogueSubsystem::StartDialogueWithMode(
 			}
 			Char->DisableInput(PC);
 		}
+	}
 
+	if (bInteractive)
+	{
 		FInputModeUIOnly InputMode;
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(true);
@@ -94,9 +109,20 @@ void UDialogueSubsystem::HandleLineFinishedRevealing()
 			AmbientAdvanceTimer,
 			this,
 			&UDialogueSubsystem::AdvanceLine,
-			ActiveAmbientLineHoldSeconds,
+			GetHoldSecondsForCurrentLine(),
 			false);
 	}
+}
+
+float UDialogueSubsystem::GetHoldSecondsForCurrentLine() const
+{
+	if (!ActiveData || !ActiveData->Lines.IsValidIndex(CurrentLineIndex))
+	{
+		return ActiveAmbientLineHoldSeconds;
+	}
+
+	const float OverrideSeconds = ActiveData->Lines[CurrentLineIndex].LineHoldSecondsOverride;
+	return OverrideSeconds > 0.0f ? OverrideSeconds : ActiveAmbientLineHoldSeconds;
 }
 
 void UDialogueSubsystem::AdvanceLine()
@@ -139,13 +165,16 @@ void UDialogueSubsystem::EndDialogue()
 		Widget = nullptr;
 	}
 
-	if (ActivePC && ActivePlaybackMode == EDialoguePlaybackMode::Interactive)
+	if (ActivePC && bBlockedMovementForActiveDialogue)
 	{
 		if (ACharacter* Char = Cast<ACharacter>(ActivePC->GetPawn()))
 		{
 			Char->EnableInput(ActivePC);
 		}
+	}
 
+	if (ActivePC && ActivePlaybackMode == EDialoguePlaybackMode::Interactive)
+	{
 		FInputModeGameOnly InputMode;
 		ActivePC->SetInputMode(InputMode);
 		ActivePC->SetShowMouseCursor(false);
@@ -157,6 +186,7 @@ void UDialogueSubsystem::EndDialogue()
 	CurrentLineIndex = 0;
 	bMarkSeenOnEnd = true;
 	bSaveCheckpointOnEnd = true;
+	bBlockedMovementForActiveDialogue = false;
 	ActivePlaybackMode = EDialoguePlaybackMode::Interactive;
 	ActiveAmbientLineHoldSeconds = DefaultAmbientLineHoldSeconds;
 }

@@ -6,9 +6,7 @@
 #include "DialogueWidget.generated.h"
 
 class UTextBlock;
-class UBorder;
 class UButton;
-class UVerticalBox;
 class USizeBox;
 class UOverlay;
 
@@ -42,7 +40,6 @@ private:
 	void TickTypewriter();
 	void FinishTypewriter();
 
-	UTextBlock* SpeakerText   = nullptr;
 	UTextBlock* DialogueText  = nullptr;
 	UTextBlock* HintText      = nullptr;
 	UButton*    ClickCatcher  = nullptr;

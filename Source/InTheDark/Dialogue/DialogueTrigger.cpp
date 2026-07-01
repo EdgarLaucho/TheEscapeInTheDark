@@ -59,5 +59,11 @@ void ADialogueTrigger::HandleBeginOverlap(
 	if (!DialogueSubsystem || DialogueSubsystem->IsDialogueActive()) return;
 
 	bTriggeredThisSession = true;
-	DialogueSubsystem->StartAmbientDialogue(DialogueData, DialogueID, PC, bMarkSeenOnComplete, LineHoldSeconds);
+	DialogueSubsystem->StartAmbientDialogue(
+		DialogueData,
+		DialogueID,
+		PC,
+		bMarkSeenOnComplete,
+		LineHoldSeconds,
+		bBlockMovementDuringDialogue);
 }

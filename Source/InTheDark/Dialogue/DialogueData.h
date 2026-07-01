@@ -14,6 +14,9 @@ struct INTHEDARK_API FDialogueLine
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue", meta = (MultiLine = true))
 	FText LineText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue", meta = (ClampMin = "0.0"))
+	float LineHoldSecondsOverride = 0.0f;
 };
 
 /** DataAsset que contiene una secuencia de líneas de diálogo.
