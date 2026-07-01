@@ -155,7 +155,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Save")
 	void ApplyLoadedTutorialState(int32 LoadedStep, bool bLoadedTutorialFinished);
 	
-
+	
 private:
 	UPROPERTY()
 	TSet<TObjectPtr<UInputAction>> HeldActions;
