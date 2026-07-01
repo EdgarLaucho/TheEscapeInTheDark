@@ -250,3 +250,13 @@ void APlayerTutorialManager::ApplyLoadedTutorialState(int32 LoadedStep, bool bLo
 		FinishTutorial();
 	}
 }
+
+void APlayerTutorialManager::InitializeTutorialInputDevice(bool bInitialUsingGamepad)
+{
+	bUsingGamepad = bInitialUsingGamepad;
+
+	if (!bTutorialFinished && IsValidCurrentStep())
+	{
+		ShowStep();
+	}
+}

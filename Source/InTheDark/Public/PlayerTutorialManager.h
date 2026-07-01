@@ -154,6 +154,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Save")
 	void ApplyLoadedTutorialState(int32 LoadedStep, bool bLoadedTutorialFinished);
+
+	UFUNCTION(BlueprintCallable, Category = "Tutorial")
+	void InitializeTutorialInputDevice(bool bInitialUsingGamepad);
 	
 	
 private:
