@@ -136,7 +136,6 @@ void UEncounterDirectorComponent::BeginWaveActuallyNow()
 
 	SpawnDirectives(*Wave);
 
-	// Si ningún spawn produjo enemigos y no hay pendientes, saltar.
 	if (AliveEnemies.Num() == 0 && PendingSpawns.Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: wave %d produced 0 enemies; treating as cleared."),
@@ -145,8 +144,7 @@ void UEncounterDirectorComponent::BeginWaveActuallyNow()
 	}
 }
 
-TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirective(
-	const FEnemySpawn& Directive,
+TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchors(
 	TSubclassOf<AActor> EnemyClass,
 	const TSet<ASpawnAnchor*>* ReservedAnchors) const
 {
@@ -160,10 +158,6 @@ TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirecti
 	{
 		if (!A) { continue; }
 		if (ReservedAnchors && ReservedAnchors->Contains(A.Get()))
-		{
-			continue;
-		}
-		if (Directive.AnchorTag.IsValid() && !A->AnchorTags.HasTag(Directive.AnchorTag))
 		{
 			continue;
 		}
@@ -199,10 +193,10 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 
 		for (int32 i = 0; i < FMath::Max(1, Directive.Count); ++i)
 		{
-			TArray<ASpawnAnchor*> Candidates = GetAvailableAnchorsForDirective(Directive, EnemyCls, &ReservedAnchors);
+			TArray<ASpawnAnchor*> Candidates = GetAvailableAnchors(EnemyCls, &ReservedAnchors);
 			if (Candidates.Num() == 0)
 			{
-				// Fallback: cualquier anchor con el tag, ignorando FOV/distancia, pero nunca ocupacion/reserva.
+				// Fallback: ignore FOV/distance, but never reservation or occupation.
 				const ACombatArena* Arena = GetArena();
 				if (Arena)
 				{
@@ -210,7 +204,6 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 					{
 						if (!A) continue;
 						if (ReservedAnchors.Contains(A.Get())) continue;
-						if (Directive.AnchorTag.IsValid() && !A->AnchorTags.HasTag(Directive.AnchorTag)) continue;
 						if (A->IsSpawnLocationOccupied(EnemyCls)) continue;
 						Candidates.Add(A);
 					}
@@ -218,16 +211,14 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 			}
 			if (Candidates.Num() == 0)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: no anchors for directive tag '%s'."),
-					*Directive.AnchorTag.ToString());
+				UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: no free anchors for %s."),
+					*EnemyCls->GetName());
 				continue;
 			}
 
 			ASpawnAnchor* Picked = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
 			ReservedAnchors.Add(Picked);
-			const float Lead = Picked->ResolveLead(Directive);
-
-			Picked->PlayTelegraph(Directive);
+			const float Lead = FMath::Max(0.f, Directive.PreSpawnLead);
 
 			if (Lead > 0.f)
 			{
@@ -235,7 +226,6 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 				FPendingSpawn Pending;
 				Pending.EnemyClass = EnemyCls;
 				Pending.Anchor = Picked;
-				Pending.Directive = Directive;
 				PendingSpawns.Add(MoveTemp(Pending));
 				FTimerDelegate TimerDel;
 				TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, Idx);
@@ -243,7 +233,7 @@ void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 			}
 			else
 			{
-				AActor* Spawned = Picked->PerformSpawn(EnemyCls, Directive);
+				AActor* Spawned = Picked->PerformSpawn(EnemyCls);
 				TrackSpawnedEnemy(Spawned);
 			}
 		}
@@ -259,7 +249,7 @@ void UEncounterDirectorComponent::ExecutePendingSpawn(int32 PendingIndex)
 
 	if (Pending.Anchor->IsSpawnLocationOccupied(Pending.EnemyClass))
 	{
-		TArray<ASpawnAnchor*> Candidates = GetAvailableAnchorsForDirective(Pending.Directive, Pending.EnemyClass);
+		TArray<ASpawnAnchor*> Candidates = GetAvailableAnchors(Pending.EnemyClass);
 		if (Candidates.Num() > 0)
 		{
 			Pending.Anchor = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
@@ -283,10 +273,9 @@ void UEncounterDirectorComponent::ExecutePendingSpawn(int32 PendingIndex)
 		}
 	}
 
-	AActor* Spawned = Pending.Anchor->PerformSpawn(Pending.EnemyClass, Pending.Directive);
+	AActor* Spawned = Pending.Anchor->PerformSpawn(Pending.EnemyClass);
 	TrackSpawnedEnemy(Spawned);
 
-	// Comprueba si fue el último spawn diferido y no quedan enemigos vivos.
 	if (State == EEncounterState::WaveActive && AliveEnemies.Num() == 0 && !HasActivePendingSpawns())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: all deferred spawns complete but 0 enemies alive; treating as cleared."));

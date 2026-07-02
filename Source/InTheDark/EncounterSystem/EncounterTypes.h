@@ -1,12 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameplayTagContainer.h"
 #include "EncounterTypes.generated.h"
 
 class AActor;
-class UNiagaraSystem;
-class USoundBase;
 
 UENUM(BlueprintType)
 enum class EWaveContinuationMode : uint8
@@ -25,12 +22,10 @@ struct INTHEDARK_API FWaveContinuation
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Continuation")
 	EWaveContinuationMode Mode = EWaveContinuationMode::OnAllCleared;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Continuation",
-		meta = (EditCondition = "Mode != EWaveContinuationMode::OnAllCleared"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Continuation", meta = (EditCondition = "Mode != EWaveContinuationMode::OnAllCleared"))
 	int32 RemainingThreshold = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Continuation",
-		meta = (EditCondition = "Mode != EWaveContinuationMode::OnAllCleared"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Continuation", meta = (EditCondition = "Mode != EWaveContinuationMode::OnAllCleared"))
 	float ElapsedSeconds = 8.f;
 };
 
@@ -45,17 +40,8 @@ struct INTHEDARK_API FEnemySpawn
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn", meta = (ClampMin = "1"))
 	int32 Count = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn")
-	FGameplayTag AnchorTag;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Telegraph", meta = (ClampMin = "0.0"))
 	float PreSpawnLead = 0.8f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Telegraph")
-	TSoftObjectPtr<UNiagaraSystem> PreSpawnVFXOverride;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Telegraph")
-	TSoftObjectPtr<USoundBase> PreSpawnSFXOverride;
 };
 
 USTRUCT(BlueprintType)
@@ -74,13 +60,4 @@ struct INTHEDARK_API FEncounterWave
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave", meta = (ClampMin = "0.0"))
 	float DelayBeforeWave = 0.f;
-};
-
-USTRUCT(BlueprintType)
-struct INTHEDARK_API FEncounterReward
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward")
-	TSoftClassPtr<AActor> RewardClass;
 };

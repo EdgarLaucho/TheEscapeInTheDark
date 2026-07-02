@@ -18,8 +18,5 @@ public:
 	float PostClearBeatSeconds = 2.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Encounter")
-	FEncounterReward Reward;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Encounter")
 	bool bPersistCleared = true;
 };

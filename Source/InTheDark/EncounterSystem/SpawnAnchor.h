@@ -2,14 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "GameplayTagContainer.h"
-#include "EncounterSystem/EncounterTypes.h"
 #include "SpawnAnchor.generated.h"
 
 class UBillboardComponent;
 class UArrowComponent;
-class UNiagaraSystem;
-class USoundBase;
 
 UCLASS(Blueprintable, BlueprintType)
 class INTHEDARK_API ASpawnAnchor : public AActor
@@ -18,18 +14,6 @@ class INTHEDARK_API ASpawnAnchor : public AActor
 
 public:
 	ASpawnAnchor();
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Anchor")
-	FGameplayTagContainer AnchorTags;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Telegraph")
-	TSoftObjectPtr<UNiagaraSystem> DefaultPreSpawnVFX;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Telegraph")
-	TSoftObjectPtr<USoundBase> DefaultPreSpawnSFX;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Telegraph", meta = (ClampMin = "0.0"))
-	float DefaultLeadTime = 0.8f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visibility")
 	bool bBlockIfPlayerInFOV = true;
@@ -48,10 +32,7 @@ public:
 
 	bool IsAvailableForSpawn(const AActor* PlayerActor) const;
 	bool IsSpawnLocationOccupied(TSubclassOf<AActor> EnemyClass) const;
-	AActor* PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemySpawn& Directive);
-
-	float ResolveLead(const FEnemySpawn& Directive) const;
-	void PlayTelegraph(const FEnemySpawn& Directive) const;
+	AActor* PerformSpawn(TSubclassOf<AActor> EnemyClass);
 
 protected:
 	virtual void BeginPlay() override;

@@ -41,8 +41,6 @@ void AEncounterGate::Unlock()
 {
 	if (!bLocked) { return; }
 	bLocked = false;
-	// Disable collision immediately so the player can pass while the Blueprint
-	// keeps the mesh visible for the sink/open animation.
 	SetGateCollisionEnabled(false);
 	StartGateMove(false);
 	OnGateUnlocked();
@@ -99,12 +97,7 @@ void AEncounterGate::StartGateMove(bool bClosed)
 		return;
 	}
 
-	World->GetTimerManager().SetTimer(
-		GateMoveTimerHandle,
-		this,
-		&AEncounterGate::UpdateGateMove,
-		1.f / 60.f,
-		true);
+	World->GetTimerManager().SetTimer(GateMoveTimerHandle, this, &AEncounterGate::UpdateGateMove, 1.f / 60.f, true);
 }
 
 void AEncounterGate::UpdateGateMove()
@@ -115,6 +108,7 @@ void AEncounterGate::UpdateGateMove()
 		{
 			World->GetTimerManager().ClearTimer(GateMoveTimerHandle);
 		}
+
 		return;
 	}
 
@@ -122,9 +116,7 @@ void AEncounterGate::UpdateGateMove()
 	const float DeltaSeconds = World ? World->GetDeltaSeconds() : 1.f / 60.f;
 	MoveElapsedSeconds += DeltaSeconds;
 
-	const float Alpha = MoveDurationSeconds > KINDA_SMALL_NUMBER
-		? FMath::Clamp(MoveElapsedSeconds / MoveDurationSeconds, 0.f, 1.f)
-		: 1.f;
+	const float Alpha = MoveDurationSeconds > KINDA_SMALL_NUMBER ? FMath::Clamp(MoveElapsedSeconds / MoveDurationSeconds, 0.f, 1.f) : 1.f;
 	const float SmoothAlpha = FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f);
 	MeshComponent->SetRelativeLocation(FMath::Lerp(MoveStartRelativeLocation, MoveTargetRelativeLocation, SmoothAlpha));
 

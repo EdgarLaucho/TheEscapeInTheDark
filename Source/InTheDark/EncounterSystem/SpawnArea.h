@@ -57,12 +57,10 @@ private:
 	void DespawnAll();
 
 	UFUNCTION()
-	void OnOverlapBegin(UPrimitiveComponent* Comp, AActor* Other, UPrimitiveComponent* OtherComp,
-		int32 BodyIndex, bool bFromSweep, const FHitResult& Hit);
+	void OnOverlapBegin(UPrimitiveComponent* Comp, AActor* Other, UPrimitiveComponent* OtherComp, int32 BodyIndex, bool bFromSweep, const FHitResult& Hit);
 
 	UFUNCTION()
-	void OnOverlapEnd(UPrimitiveComponent* Comp, AActor* Other,
-		UPrimitiveComponent* OtherComp, int32 BodyIndex);
+	void OnOverlapEnd(UPrimitiveComponent* Comp, AActor* Other, UPrimitiveComponent* OtherComp, int32 BodyIndex);
 
 	UFUNCTION()
 	void OnEnemyDestroyed(AActor* DestroyedActor);

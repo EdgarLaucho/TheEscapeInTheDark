@@ -26,9 +26,6 @@ ACombatArena::ACombatArena()
 	TriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	TriggerVolume->SetGenerateOverlapEvents(true);
 
-	RewardAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("RewardAnchor"));
-	RewardAnchor->SetupAttachment(Root);
-
 	Director = CreateDefaultSubobject<UEncounterDirectorComponent>(TEXT("Director"));
 }
 
@@ -151,7 +148,6 @@ void ACombatArena::HandleEncounterCleared()
 	}
 
 	UnlockExitGates();
-	SpawnReward();
 
 	if (Config && Config->bPersistCleared && !EncounterId.IsNone())
 	{
@@ -161,24 +157,6 @@ void ACombatArena::HandleEncounterCleared()
 			GI->WriteSaveToDisk();
 		}
 	}
-}
-
-void ACombatArena::SpawnReward()
-{
-	if (!Config || !RewardAnchor || Config->Reward.RewardClass.IsNull())
-	{
-		return;
-	}
-
-	UClass* RewardClass = Config->Reward.RewardClass.LoadSynchronous();
-	if (!RewardClass)
-	{
-		return;
-	}
-
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	GetWorld()->SpawnActor<AActor>(RewardClass, RewardAnchor->GetComponentTransform(), Params);
 }
 
 void ACombatArena::LockEntryGates()

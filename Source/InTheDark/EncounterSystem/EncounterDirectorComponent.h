@@ -52,7 +52,6 @@ private:
 	{
 		TSubclassOf<AActor> EnemyClass;
 		TWeakObjectPtr<ASpawnAnchor> Anchor;
-		FEnemySpawn Directive;
 		FTimerHandle TimerHandle;
 		int32 RetryCount = 0;
 	};
@@ -86,9 +85,6 @@ private:
 	ACombatArena* GetArena() const;
 	UEncounterConfig* GetConfig() const;
 	const FEncounterWave* GetCurrentWave() const;
-	TArray<ASpawnAnchor*> GetAvailableAnchorsForDirective(
-		const FEnemySpawn& Directive,
-		TSubclassOf<AActor> EnemyClass,
-		const TSet<ASpawnAnchor*>* ReservedAnchors = nullptr) const;
+	TArray<ASpawnAnchor*> GetAvailableAnchors(TSubclassOf<AActor> EnemyClass, const TSet<ASpawnAnchor*>* ReservedAnchors = nullptr) const;
 	AActor* GetPlayerActor() const;
 };
