@@ -15,8 +15,6 @@ class INTHEDARK_API ADialogueNPC : public AActor
 public:
 	ADialogueNPC();
 
-	/** ID único del diálogo. Se usa para marcar como visto y para el save.
-	 *  NUNCA renombrar con saves activos en disco. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Dialogue")
 	FName DialogueID;
 
@@ -26,11 +24,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue")
 	TObjectPtr<USphereComponent> TriggerZone;
 
-	/** Llama desde el nodo BPI_Interactable::Interact del Blueprint derivado. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void TriggerDialogue();
 
-	/** Usa en BPI_Interactable::CanInteract — false si el diálogo ya se vio o no hay data. */
 	UFUNCTION(BlueprintPure, Category = "Dialogue")
 	bool CanTriggerDialogue() const;
 
@@ -39,14 +35,11 @@ protected:
 
 private:
 	UFUNCTION()
-	void HandleBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
-		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-		bool bFromSweep, const FHitResult& SweepResult);
+	void HandleBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
 	UFUNCTION()
-	void HandleEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
-		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+	void HandleEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	bool bPlayerInRange         = false;
-	bool bTriggeredThisSession  = false;
+	bool bPlayerInRange = false;
+	bool bTriggeredThisSession = false;
 };

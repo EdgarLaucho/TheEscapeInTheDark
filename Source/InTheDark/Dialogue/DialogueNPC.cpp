@@ -26,8 +26,7 @@ void ADialogueNPC::BeginPlay()
 	TriggerZone->OnComponentEndOverlap.AddDynamic(this, &ADialogueNPC::HandleEndOverlap);
 }
 
-void ADialogueNPC::HandleBeginOverlap(UPrimitiveComponent*, AActor* OtherActor,
-	UPrimitiveComponent*, int32, bool, const FHitResult&)
+void ADialogueNPC::HandleBeginOverlap(UPrimitiveComponent*, AActor* OtherActor, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	const UWorld* World = GetWorld();
 	if (!World) return;
@@ -36,8 +35,7 @@ void ADialogueNPC::HandleBeginOverlap(UPrimitiveComponent*, AActor* OtherActor,
 		bPlayerInRange = true;
 }
 
-void ADialogueNPC::HandleEndOverlap(UPrimitiveComponent*, AActor* OtherActor,
-	UPrimitiveComponent*, int32)
+void ADialogueNPC::HandleEndOverlap(UPrimitiveComponent*, AActor* OtherActor, UPrimitiveComponent*, int32)
 {
 	const UWorld* World = GetWorld();
 	if (!World) return;
@@ -49,8 +47,7 @@ void ADialogueNPC::HandleEndOverlap(UPrimitiveComponent*, AActor* OtherActor,
 bool ADialogueNPC::CanTriggerDialogue() const
 {
 	if (!DialogueData || DialogueID.IsNone()) return false;
-	const UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
-		UGameplayStatics::GetGameInstance(GetWorld()));
+	const UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
 	return GI && !GI->IsDialogueSeen(DialogueID);
 }
 

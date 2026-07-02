@@ -135,19 +135,18 @@ void UObjectPoolSubsystem::ReleaseToPool(AActor* Actor)
 		return;
 	}
 
-	TSubclassOf<AActor> ActorClass = Actor->GetClass();
-
-	if (!Pools.Contains(ActorClass))
+	const TSubclassOf<AActor> ActorClass = Actor->GetClass();
+	FObjectPool* Pool = Pools.Find(ActorClass);
+	if (!Pool)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ObjectPool: Releasing actor of class %s but no pool exists. Destroying instead."), *ActorClass->GetName());
 		Actor->Destroy();
 		return;
 	}
 
-	FObjectPool& Pool = Pools[ActorClass];
-	Pool.ActiveActors.Remove(Actor);
+	Pool->ActiveActors.Remove(Actor);
 	DeactivateActor(Actor);
-	Pool.InactiveActors.Add(Actor);
+	Pool->InactiveActors.Add(Actor);
 
 	OnActorReleased.Broadcast(Actor);
 }
@@ -346,12 +345,7 @@ void UObjectPoolSubsystem::CleanupPool(FObjectPool& Pool)
 
 FObjectPool& UObjectPoolSubsystem::EnsurePool(TSubclassOf<AActor> ActorClass)
 {
-	if (!Pools.Contains(ActorClass))
-	{
-		FObjectPool NewPool;
-		Pools.Add(ActorClass, NewPool);
-	}
-	return Pools[ActorClass];
+	return Pools.FindOrAdd(ActorClass);
 }
 
 bool UObjectPoolSubsystem::CanAcquire(const FObjectPool& Pool) const

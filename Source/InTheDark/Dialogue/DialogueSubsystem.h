@@ -8,11 +8,10 @@
 class UDialogueWidget;
 class APlayerController;
 
-UENUM(BlueprintType)
 enum class EDialoguePlaybackMode : uint8
 {
-	Interactive UMETA(DisplayName = "Interactive"),
-	Ambient UMETA(DisplayName = "Ambient")
+	Interactive,
+	Ambient
 };
 
 UCLASS()
@@ -21,21 +20,12 @@ class INTHEDARK_API UDialogueSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	/** Starts a dialogue. LineHoldSeconds <= 0 keeps click-to-advance; > 0 auto-advances each line. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void StartDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC, float LineHoldSeconds = 0.0f);
 
-	/** Starts a narrated dialogue that keeps gameplay input active and advances automatically. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
-	void StartAmbientDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC,
-		bool bMarkSeen = true, float LineHoldSeconds = 2.0f, bool bBlockMovement = false);
+	void StartAmbientDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC, bool bMarkSeen = true, float LineHoldSeconds = 2.0f, bool bBlockMovement = false);
 
-	UFUNCTION(BlueprintCallable, Category = "Dialogue")
-	void StartDialogueWithMode(UDialogueData* Data, FName DialogueID, APlayerController* PC,
-		EDialoguePlaybackMode PlaybackMode, bool bMarkSeen = true, float LineHoldSeconds = 2.0f,
-		bool bBlockMovement = false);
-
-	/** Advances to the next line. If this was the last line, closes the dialogue. */
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void AdvanceLine();
 
@@ -43,6 +33,8 @@ public:
 	bool IsDialogueActive() const { return bActive; }
 
 private:
+	void StartDialogueWithMode(UDialogueData* Data, FName DialogueID, APlayerController* PC, EDialoguePlaybackMode PlaybackMode, bool bMarkSeen, float LineHoldSeconds, bool bBlockMovement);
+
 	void EndDialogue();
 
 	UFUNCTION()
@@ -54,6 +46,9 @@ private:
 	float GetHoldSecondsForCurrentLine() const;
 
 	void SaveAndMarkSeen();
+
+	UPROPERTY(Transient)
+	TSubclassOf<UDialogueWidget> WidgetClass;
 
 	UPROPERTY()
 	TObjectPtr<UDialogueWidget> Widget;

@@ -19,10 +19,6 @@ struct INTHEDARK_API FDialogueLine
 	float LineHoldSecondsOverride = 0.0f;
 };
 
-/** DataAsset que contiene una secuencia de líneas de diálogo.
- *  Crear en el editor: click derecho → Miscellaneous → Data Asset → DialogueData.
- *  Asignar al ADialogueNPC correspondiente.
- */
 UCLASS(BlueprintType)
 class INTHEDARK_API UDialogueData : public UPrimaryDataAsset
 {
