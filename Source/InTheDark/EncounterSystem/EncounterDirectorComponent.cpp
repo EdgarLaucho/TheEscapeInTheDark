@@ -15,11 +15,6 @@ UEncounterDirectorComponent::UEncounterDirectorComponent()
 	SetAutoActivate(true);
 }
 
-void UEncounterDirectorComponent::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
 void UEncounterDirectorComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -57,14 +52,6 @@ AActor* UEncounterDirectorComponent::GetPlayerActor() const
 	if (!World) { return nullptr; }
 	APlayerController* PC = World->GetFirstPlayerController();
 	return PC ? PC->GetPawn() : nullptr;
-}
-
-void UEncounterDirectorComponent::FireBanter(FGameplayTag Tag)
-{
-	if (Tag.IsValid())
-	{
-		OnBanterCue.Broadcast(Tag);
-	}
 }
 
 int32 UEncounterDirectorComponent::GetAliveEnemyCount() const
@@ -105,28 +92,9 @@ void UEncounterDirectorComponent::StartEncounter()
 		}
 	}
 
-	OnEncounterStarted.Broadcast();
 	SetComponentTickEnabled(true);
 
 	BeginNextWave();
-}
-
-void UEncounterDirectorComponent::AbortEncounter()
-{
-	if (State == EEncounterState::Idle || State == EEncounterState::Cleared)
-	{
-		return;
-	}
-	State = EEncounterState::Idle;
-	SetComponentTickEnabled(false);
-	CancelPendingSpawns();
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(DelayTimerHandle);
-		World->GetTimerManager().ClearTimer(PostClearTimerHandle);
-	}
-	ReleaseAliveEnemiesToPool();
-	AliveEnemies.Reset();
 }
 
 void UEncounterDirectorComponent::BeginNextWave()
@@ -165,9 +133,6 @@ void UEncounterDirectorComponent::BeginWaveActuallyNow()
 
 	State = EEncounterState::WaveActive;
 	WaveElapsed = 0.f;
-
-	FireBanter(Wave->BanterStartTag);
-	OnWaveStarted.Broadcast(CurrentWaveIndex);
 
 	SpawnDirectives(*Wave);
 
@@ -440,11 +405,7 @@ void UEncounterDirectorComponent::HandleWaveCleared()
 {
 	if (State != EEncounterState::WaveActive) { return; }
 
-	const FEncounterWave* Wave = GetCurrentWave();
-	if (Wave) { FireBanter(Wave->BanterEndTag); }
-
 	State = EEncounterState::PostClear;
-	OnWaveCleared.Broadcast(CurrentWaveIndex);
 
 	const UEncounterConfig* Cfg = GetConfig();
 	const bool bLastWave = Cfg && !Cfg->Waves.IsValidIndex(CurrentWaveIndex + 1);
@@ -477,7 +438,6 @@ void UEncounterDirectorComponent::HandleEncounterCleared()
 	ReleaseAliveEnemiesToPool();
 	AliveEnemies.Reset();
 
-	// Desuscribir de los eventos del pool.
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
 	{
 		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
@@ -487,25 +447,4 @@ void UEncounterDirectorComponent::HandleEncounterCleared()
 	}
 
 	OnEncounterCleared.Broadcast();
-}
-
-void UEncounterDirectorComponent::HandleEncounterFailed()
-{
-	if (State == EEncounterState::Failed) { return; }
-	State = EEncounterState::Failed;
-	SetComponentTickEnabled(false);
-	CancelPendingSpawns();
-	ReleaseAliveEnemiesToPool();
-	AliveEnemies.Reset();
-
-	// Desuscribir de los eventos del pool.
-	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
-	{
-		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
-		{
-			Pool->OnActorReleased.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
-		}
-	}
-
-	OnEncounterFailed.Broadcast();
 }

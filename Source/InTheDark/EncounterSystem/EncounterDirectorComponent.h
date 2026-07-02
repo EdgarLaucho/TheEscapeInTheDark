@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "GameplayTagContainer.h"
 #include "EncounterSystem/EncounterTypes.h"
 #include "EncounterDirectorComponent.generated.h"
 
@@ -18,22 +17,11 @@ enum class EEncounterState : uint8
 	Starting,
 	WaveActive,
 	PostClear,
-	Cleared,
-	Failed
+	Cleared
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FEncounterSimpleEvent);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEncounterWaveEvent, int32, WaveIndex);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FEncounterBanterCue, FGameplayTag, CueTag);
 
-/**
- * Ejecutor de oleadas basado en FSM. Vive en ACombatArena y lee
- * ACombatArena::Anchors / Config / Gates a través del owner.
- *
- * Ciclo de vida:
- *   Idle --StartEncounter()--> Starting -> WaveActive -> PostClear -> (WaveActive o Cleared)
- *   cualquier estado --muerte del jugador--> Failed (si Config->bReloadCheckpointOnFailure)
- */
 UCLASS(ClassGroup = (Encounter), meta = (BlueprintSpawnableComponent))
 class INTHEDARK_API UEncounterDirectorComponent : public UActorComponent
 {
@@ -42,46 +30,12 @@ class INTHEDARK_API UEncounterDirectorComponent : public UActorComponent
 public:
 	UEncounterDirectorComponent();
 
-	/* ---------- API ---------- */
-
-	UFUNCTION(BlueprintCallable, Category = "Encounter")
 	void StartEncounter();
-
-	UFUNCTION(BlueprintCallable, Category = "Encounter")
-	void AbortEncounter();
-
-	UFUNCTION(BlueprintPure, Category = "Encounter")
-	EEncounterState GetState() const { return State; }
-
-	UFUNCTION(BlueprintPure, Category = "Encounter")
-	int32 GetCurrentWaveIndex() const { return CurrentWaveIndex; }
-
-	UFUNCTION(BlueprintPure, Category = "Encounter")
-	int32 GetAliveEnemyCount() const;
-
-	/* ---------- Eventos ---------- */
-
-	UPROPERTY(BlueprintAssignable, Category = "Encounter|Events")
-	FEncounterSimpleEvent OnEncounterStarted;
-
-	UPROPERTY(BlueprintAssignable, Category = "Encounter|Events")
-	FEncounterWaveEvent OnWaveStarted;
-
-	UPROPERTY(BlueprintAssignable, Category = "Encounter|Events")
-	FEncounterWaveEvent OnWaveCleared;
 
 	UPROPERTY(BlueprintAssignable, Category = "Encounter|Events")
 	FEncounterSimpleEvent OnEncounterCleared;
 
-	UPROPERTY(BlueprintAssignable, Category = "Encounter|Events")
-	FEncounterSimpleEvent OnEncounterFailed;
-
-	/** Disparado con los tags de banter de oleada. El sistema de diálogo escucha aquí. */
-	UPROPERTY(BlueprintAssignable, Category = "Encounter|Events")
-	FEncounterBanterCue OnBanterCue;
-
 protected:
-	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
@@ -94,7 +48,6 @@ private:
 	UPROPERTY(Transient)
 	TArray<TWeakObjectPtr<AActor>> AliveEnemies;
 
-	/** Spawns pendientes esperando a que expire el lead de telegrafeo. */
 	struct FPendingSpawn
 	{
 		TSubclassOf<AActor> EnemyClass;
@@ -111,8 +64,6 @@ private:
 	FTimerHandle DelayTimerHandle;
 	FTimerHandle PostClearTimerHandle;
 
-	/* --- pasos internos --- */
-
 	void BeginNextWave();
 	void BeginWaveActuallyNow();
 	void SpawnDirectives(const FEncounterWave& Wave);
@@ -120,11 +71,11 @@ private:
 	void CancelPendingSpawns();
 	void TrackSpawnedEnemy(AActor* Enemy);
 	void ReleaseAliveEnemiesToPool();
+	int32 GetAliveEnemyCount() const;
 	bool HasActivePendingSpawns() const;
 	void EvaluateWaveContinuation();
 	void HandleWaveCleared();
 	void HandleEncounterCleared();
-	void HandleEncounterFailed();
 
 	UFUNCTION()
 	void HandleEnemyDestroyed(AActor* DestroyedActor);
@@ -140,7 +91,4 @@ private:
 		TSubclassOf<AActor> EnemyClass,
 		const TSet<ASpawnAnchor*>* ReservedAnchors = nullptr) const;
 	AActor* GetPlayerActor() const;
-
-	/** Dispara un cue de banter. Los tags nulos se ignoran. */
-	void FireBanter(FGameplayTag Tag);
 };
