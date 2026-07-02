@@ -13,36 +13,31 @@
 void UDialogueSubsystem::StartDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC, float LineHoldSeconds)
 {
 	const bool bAutoAdvance = LineHoldSeconds > 0.0f;
-	StartDialogueWithMode(
-		Data,
-		DialogueID,
-		PC,
-		bAutoAdvance ? EDialoguePlaybackMode::Ambient : EDialoguePlaybackMode::Interactive,
-		true,
-		LineHoldSeconds);
+	StartDialogueWithMode(Data, DialogueID, PC, bAutoAdvance ? EDialoguePlaybackMode::Ambient : EDialoguePlaybackMode::Interactive, true, LineHoldSeconds, false);
 }
 
-void UDialogueSubsystem::StartAmbientDialogue(
-	UDialogueData* Data,
-	FName DialogueID,
-	APlayerController* PC,
-	bool bMarkSeen,
-	float LineHoldSeconds,
-	bool bBlockMovement)
+void UDialogueSubsystem::StartAmbientDialogue(UDialogueData* Data, FName DialogueID, APlayerController* PC, bool bMarkSeen, float LineHoldSeconds, bool bBlockMovement)
 {
 	StartDialogueWithMode(Data, DialogueID, PC, EDialoguePlaybackMode::Ambient, bMarkSeen, LineHoldSeconds, bBlockMovement);
 }
 
-void UDialogueSubsystem::StartDialogueWithMode(
-	UDialogueData* Data,
-	FName DialogueID,
-	APlayerController* PC,
-	EDialoguePlaybackMode PlaybackMode,
-	bool bMarkSeen,
-	float LineHoldSeconds,
-	bool bBlockMovement)
+void UDialogueSubsystem::StartDialogueWithMode(UDialogueData* Data, FName DialogueID, APlayerController* PC, EDialoguePlaybackMode PlaybackMode, bool bMarkSeen, float LineHoldSeconds, bool bBlockMovement)
 {
 	if (!Data || Data->Lines.IsEmpty() || !PC || bActive) return;
+
+	if (!WidgetClass)
+	{
+		WidgetClass = LoadClass<UDialogueWidget>(nullptr, TEXT("/Game/Blueprints/Dialogues/WBP_Dialogue.WBP_Dialogue_C"));
+	}
+	
+	if (!WidgetClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("DialogueSubsystem: WBP_Dialogue no encontrado; dialogo '%s' omitido."), *DialogueID.ToString());
+		return;
+	}
+
+	Widget = CreateWidget<UDialogueWidget>(PC, WidgetClass);
+	if (!Widget) return;
 
 	const bool bInteractive = PlaybackMode == EDialoguePlaybackMode::Interactive;
 	const bool bShouldBlockMovement = bInteractive || bBlockMovement;
@@ -58,14 +53,10 @@ void UDialogueSubsystem::StartDialogueWithMode(
 	bBlockedMovementForActiveDialogue = bShouldBlockMovement;
 	ActiveAmbientLineHoldSeconds = LineHoldSeconds > 0.f ? LineHoldSeconds : DefaultAmbientLineHoldSeconds;
 
-	Widget = CreateWidget<UDialogueWidget>(PC, UDialogueWidget::StaticClass());
-	if (Widget)
-	{
-		Widget->SetClickToAdvanceEnabled(bInteractive);
-		Widget->OnAdvanceRequested.AddDynamic(this, &UDialogueSubsystem::HandleAdvanceRequested);
-		Widget->OnLineFinishedRevealing.AddDynamic(this, &UDialogueSubsystem::HandleLineFinishedRevealing);
-		Widget->AddToViewport(10);
-	}
+	Widget->SetClickToAdvanceEnabled(bInteractive);
+	Widget->OnAdvanceRequested.AddDynamic(this, &UDialogueSubsystem::HandleAdvanceRequested);
+	Widget->OnLineFinishedRevealing.AddDynamic(this, &UDialogueSubsystem::HandleLineFinishedRevealing);
+	Widget->AddToViewport(10);
 
 	if (bShouldBlockMovement)
 	{
@@ -86,10 +77,7 @@ void UDialogueSubsystem::StartDialogueWithMode(
 		PC->SetShowMouseCursor(true);
 	}
 
-	if (Widget)
-	{
-		Widget->ShowLine(ActiveData->Lines[0]);
-	}
+	Widget->ShowLine(ActiveData->Lines[0]);
 }
 
 void UDialogueSubsystem::HandleAdvanceRequested()
@@ -105,12 +93,7 @@ void UDialogueSubsystem::HandleLineFinishedRevealing()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(AmbientAdvanceTimer);
-		World->GetTimerManager().SetTimer(
-			AmbientAdvanceTimer,
-			this,
-			&UDialogueSubsystem::AdvanceLine,
-			GetHoldSecondsForCurrentLine(),
-			false);
+		World->GetTimerManager().SetTimer(AmbientAdvanceTimer, this, &UDialogueSubsystem::AdvanceLine, GetHoldSecondsForCurrentLine(), false);
 	}
 }
 

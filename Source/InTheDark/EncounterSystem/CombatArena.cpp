@@ -3,12 +3,11 @@
 #include "EncounterSystem/EncounterDirectorComponent.h"
 #include "EncounterSystem/EncounterGate.h"
 #include "EncounterSystem/SpawnAnchor.h"
-#include "SaveSystem/InTheDarkGameInstance.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "SaveSystem/InTheDarkGameInstance.h"
+
 #include "Components/BoxComponent.h"
-#include "EngineUtils.h"
 #include "Engine/World.h"
-#include "Engine/Engine.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -27,9 +26,6 @@ ACombatArena::ACombatArena()
 	TriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	TriggerVolume->SetGenerateOverlapEvents(true);
 
-	RewardAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("RewardAnchor"));
-	RewardAnchor->SetupAttachment(Root);
-
 	Director = CreateDefaultSubobject<UEncounterDirectorComponent>(TEXT("Director"));
 }
 
@@ -39,10 +35,7 @@ void ACombatArena::BeginPlay()
 
 	if (bSkipIfAlreadyCleared && LookupIsAlreadyCleared())
 	{
-		// Diferir un tick para que las puertas completen su propio BeginPlay antes de cambiar su estado.
 		GetWorldTimerManager().SetTimerForNextTick(this, &ACombatArena::UnlockGatesForClearedState);
-		UE_LOG(LogTemp, Log, TEXT("CombatArena '%s' (%s): already cleared; skipping."),
-			*GetName(), *EncounterId.ToString());
 		return;
 	}
 
@@ -51,120 +44,109 @@ void ACombatArena::BeginPlay()
 		TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &ACombatArena::HandleTriggerOverlap);
 	}
 
-	if (Director)
+	if (!Config)
 	{
-		Director->OnEncounterStarted.AddDynamic(this, &ACombatArena::HandleEncounterStarted);
-		Director->OnEncounterCleared.AddDynamic(this, &ACombatArena::HandleEncounterCleared);
-		Director->OnEncounterFailed.AddDynamic(this, &ACombatArena::HandleEncounterFailed);
+		return;
 	}
 
-	// Precalienta el pool con cada clase de enemigo de todas las oleadas.
-	if (Config)
+	UGameInstance* GI = UGameplayStatics::GetGameInstance(this);
+	UObjectPoolSubsystem* Pool = GI ? GI->GetSubsystem<UObjectPoolSubsystem>() : nullptr;
+	if (!Pool)
 	{
-		if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
+		return;
+	}
+
+	TMap<UClass*, int32> MaxPerClass;
+	for (const FEncounterWave& Wave : Config->Waves)
+	{
+		for (const FEnemySpawn& Spawn : Wave.Spawns)
 		{
-			if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
+			if (UClass* EnemyClass = Spawn.Enemy.LoadSynchronous())
 			{
-				TMap<UClass*, int32> MaxPerClass;
-				for (const FEncounterWave& Wave : Config->Waves)
-				{
-					for (const FEnemySpawn& Spawn : Wave.Spawns)
-					{
-						if (Spawn.Enemy.IsNull())
-						{
-							UE_LOG(LogTemp, Warning, TEXT("[CombatArena '%s'] Wave '%s' has a Spawn entry with NULL Enemy class"),
-								*GetName(), *Wave.WaveName.ToString());
-							continue;
-						}
-						UClass* Cls = Spawn.Enemy.LoadSynchronous();
-						if (!Cls)
-						{
-							UE_LOG(LogTemp, Warning, TEXT("[CombatArena '%s'] Wave '%s' failed to load enemy class from soft ptr '%s'"),
-								*GetName(), *Wave.WaveName.ToString(), *Spawn.Enemy.ToString());
-							continue;
-						}
-						int32& Best = MaxPerClass.FindOrAdd(Cls);
-						Best = FMath::Max(Best, Spawn.Count);
-						UE_LOG(LogTemp, Log, TEXT("[CombatArena '%s'] Wave '%s' declares %d x %s (running max=%d)"),
-							*GetName(), *Wave.WaveName.ToString(), Spawn.Count, *Cls->GetName(), Best);
-					}
-				}
-				for (const TPair<UClass*, int32>& Pair : MaxPerClass)
-				{
-					if (!Pool->HasPool(Pair.Key))
-					{
-						FPoolSettings Settings;
-						Settings.PrewarmCount = Pair.Value;
-						Settings.MaxPoolSize = Pair.Value * 3;
-						Settings.bAutoExpand = true;
-						Pool->RegisterPool(Pair.Key, Settings);
-					}
-					Pool->PrewarmPool(this, Pair.Key, Pair.Value);
-					UE_LOG(LogTemp, Log, TEXT("CombatArena '%s': prewarmed %d x %s"),
-						*GetName(), Pair.Value, *Pair.Key->GetName());
-				}
+				int32& Best = MaxPerClass.FindOrAdd(EnemyClass);
+				Best = FMath::Max(Best, Spawn.Count);
 			}
 		}
+	}
+
+	for (const TPair<UClass*, int32>& Pair : MaxPerClass)
+	{
+		if (!Pool->HasPool(Pair.Key))
+		{
+			FPoolSettings Settings;
+			Settings.PrewarmCount = Pair.Value;
+			Settings.MaxPoolSize = Pair.Value * 3;
+			Settings.bAutoExpand = true;
+			Pool->RegisterPool(Pair.Key, Settings);
+		}
+
+		Pool->PrewarmPool(this, Pair.Key, Pair.Value);
 	}
 }
 
 bool ACombatArena::LookupIsAlreadyCleared() const
 {
-	if (EncounterId.IsNone()) { return false; }
+	if (EncounterId.IsNone())
+	{
+		return false;
+	}
+
 	const UWorld* World = GetWorld();
-	if (!World) { return false; }
-	UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(World));
+	if (!World)
+	{
+		return false;
+	}
+
+	const UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(World));
 	return GI && GI->IsEncounterCleared(EncounterId);
 }
 
 void ACombatArena::HandleTriggerOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*,
 	int32, bool, const FHitResult&)
 {
-	if (bAlreadyStartedThisSession) { return; }
+	if (bAlreadyStartedThisSession)
+	{
+		return;
+	}
+
 	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 	const AActor* PlayerPawn = PC ? PC->GetPawn() : nullptr;
-	if (!PlayerPawn || Other != PlayerPawn) { return; }
-
-	RequestStart();
+	if (Other == PlayerPawn)
+	{
+		RequestStart();
+	}
 }
 
 void ACombatArena::RequestStart()
 {
-	if (bAlreadyStartedThisSession) { return; }
-	if (!Director || !Config)
+	if (bAlreadyStartedThisSession || LookupIsAlreadyCleared())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ACombatArena::RequestStart: missing Director or Config on %s"),
-			*GetName());
 		return;
 	}
-	if (LookupIsAlreadyCleared()) { return; }
+
+	if (!Director || !Config)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ACombatArena::RequestStart: missing Director or Config on %s"), *GetName());
+		return;
+	}
 
 	bAlreadyStartedThisSession = true;
 	LockEntryGates();
 	Director->StartEncounter();
 }
 
-void ACombatArena::HandleEncounterStarted()
+void ACombatArena::NotifyEncounterCleared()
 {
-	// Reservado para listeners de Blueprint / en el futuro para musica, efectos, dialogos, etc. Intencionalmente vacío en C++.
-}
-
-void ACombatArena::HandleEncounterCleared()
-{
-	if (bUnlockEntryGatesOnClear) { UnlockEntryGates(); }
-	UnlockExitGates();
-	SpawnReward();
-
-	if (GEngine)
+	if (bUnlockEntryGatesOnClear)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green,
-			FString::Printf(TEXT("ENCUENTRO COMPLETADO: %s"), *EncounterId.ToString()));
+		UnlockEntryGates();
 	}
+
+	UnlockExitGates();
 
 	if (Config && Config->bPersistCleared && !EncounterId.IsNone())
 	{
-		if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
-				UGameplayStatics::GetGameInstance(GetWorld())))
+		if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(GetWorld())))
 		{
 			GI->MarkEncounterCleared(EncounterId);
 			GI->WriteSaveToDisk();
@@ -172,87 +154,49 @@ void ACombatArena::HandleEncounterCleared()
 	}
 }
 
-void ACombatArena::HandleEncounterFailed()
-{
-	UnlockEntryGates();
-	if (Config && Config->bReloadCheckpointOnFailure)
-	{
-		if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
-				UGameplayStatics::GetGameInstance(GetWorld())))
-		{
-			// De momento recarga de nivel. En futuro carga de checkpoint concreto.
-			GI->LoadOrCreateSave();
-			UGameplayStatics::OpenLevel(GetWorld(), FName(*UGameplayStatics::GetCurrentLevelName(GetWorld(), true)));
-		}
-	}
-}
-
-void ACombatArena::SpawnReward()
-{
-	if (!Config) { return; }
-	if (Config->Reward.RewardClass.IsNull() || !RewardAnchor) { return; }
-
-	UClass* Cls = Config->Reward.RewardClass.LoadSynchronous();
-	if (!Cls) { return; }
-
-	FActorSpawnParameters P;
-	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	GetWorld()->SpawnActor<AActor>(Cls, RewardAnchor->GetComponentTransform(), P);
-}
-
 void ACombatArena::LockEntryGates()
 {
-	for (const TObjectPtr<AEncounterGate>& G : EntryGates)
+	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
 	{
-		if (G) { G->Lock(); }
+		if (Gate)
+		{
+			Gate->Lock();
+		}
 	}
 }
 
 void ACombatArena::UnlockEntryGates()
 {
-	for (const TObjectPtr<AEncounterGate>& G : EntryGates)
+	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
 	{
-		if (G) { G->Unlock(); }
+		if (Gate)
+		{
+			Gate->Unlock();
+		}
 	}
 }
 
 void ACombatArena::UnlockExitGates()
 {
-	for (const TObjectPtr<AEncounterGate>& G : ExitGates)
+	for (const TObjectPtr<AEncounterGate>& Gate : ExitGates)
 	{
-		if (G) { G->Unlock(); }
+		if (Gate)
+		{
+			Gate->Unlock();
+		}
 	}
 }
 
 void ACombatArena::UnlockGatesForClearedState()
 {
 	if (bUnlockEntryGatesOnClear)
-		UnlockEntryGates();
-	else
-		LockEntryGates();  // Las puertas de entrada se cierran definitivamente al completar el reto
-	UnlockExitGates();
-}
-
-int32 ACombatArena::AutoBindAnchorsByTag(FGameplayTagContainer Filter)
-{
-	Anchors.Empty();
-	UWorld* World = GetWorld();
-	if (!World) { return 0; }
-
-	for (TActorIterator<ASpawnAnchor> It(World); It; ++It)
 	{
-		ASpawnAnchor* Anchor = *It;
-		if (!Anchor) { continue; }
-
-		if (Filter.IsEmpty() || Anchor->AnchorTags.HasAny(Filter))
-		{
-			Anchors.AddUnique(Anchor);
-		}
+		UnlockEntryGates();
+	}
+	else
+	{
+		LockEntryGates();
 	}
 
-	Modify();
-	MarkPackageDirty();
-	UE_LOG(LogTemp, Log, TEXT("ACombatArena::AutoBindAnchorsByTag bound %d anchors on %s"),
-		Anchors.Num(), *GetName());
-	return Anchors.Num();
+	UnlockExitGates();
 }

@@ -15,11 +15,6 @@ UEncounterDirectorComponent::UEncounterDirectorComponent()
 	SetAutoActivate(true);
 }
 
-void UEncounterDirectorComponent::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
 void UEncounterDirectorComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -59,12 +54,13 @@ AActor* UEncounterDirectorComponent::GetPlayerActor() const
 	return PC ? PC->GetPawn() : nullptr;
 }
 
-void UEncounterDirectorComponent::FireBanter(FGameplayTag Tag)
+UObjectPoolSubsystem* UEncounterDirectorComponent::GetPool() const
 {
-	if (Tag.IsValid())
+	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
 	{
-		OnBanterCue.Broadcast(Tag);
+		return GI->GetSubsystem<UObjectPoolSubsystem>();
 	}
+	return nullptr;
 }
 
 int32 UEncounterDirectorComponent::GetAliveEnemyCount() const
@@ -97,36 +93,14 @@ void UEncounterDirectorComponent::StartEncounter()
 	PendingSpawns.Reset();
 	WaveElapsed = 0.f;
 
-	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
+	if (UObjectPoolSubsystem* Pool = GetPool())
 	{
-		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
-		{
-			Pool->OnActorReleased.AddUniqueDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
-		}
+		Pool->OnActorReleased.AddUniqueDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
 	}
 
-	OnEncounterStarted.Broadcast();
 	SetComponentTickEnabled(true);
 
 	BeginNextWave();
-}
-
-void UEncounterDirectorComponent::AbortEncounter()
-{
-	if (State == EEncounterState::Idle || State == EEncounterState::Cleared)
-	{
-		return;
-	}
-	State = EEncounterState::Idle;
-	SetComponentTickEnabled(false);
-	CancelPendingSpawns();
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(DelayTimerHandle);
-		World->GetTimerManager().ClearTimer(PostClearTimerHandle);
-	}
-	ReleaseAliveEnemiesToPool();
-	AliveEnemies.Reset();
 }
 
 void UEncounterDirectorComponent::BeginNextWave()
@@ -166,12 +140,8 @@ void UEncounterDirectorComponent::BeginWaveActuallyNow()
 	State = EEncounterState::WaveActive;
 	WaveElapsed = 0.f;
 
-	FireBanter(Wave->BanterStartTag);
-	OnWaveStarted.Broadcast(CurrentWaveIndex);
-
 	SpawnDirectives(*Wave);
 
-	// Si ningún spawn produjo enemigos y no hay pendientes, saltar.
 	if (AliveEnemies.Num() == 0 && PendingSpawns.Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: wave %d produced 0 enemies; treating as cleared."),
@@ -180,8 +150,7 @@ void UEncounterDirectorComponent::BeginWaveActuallyNow()
 	}
 }
 
-TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirective(
-	const FEnemySpawn& Directive,
+TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchors(
 	TSubclassOf<AActor> EnemyClass,
 	const TSet<ASpawnAnchor*>* ReservedAnchors) const
 {
@@ -195,10 +164,6 @@ TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirecti
 	{
 		if (!A) { continue; }
 		if (ReservedAnchors && ReservedAnchors->Contains(A.Get()))
-		{
-			continue;
-		}
-		if (Directive.AnchorTag.IsValid() && !A->AnchorTags.HasTag(Directive.AnchorTag))
 		{
 			continue;
 		}
@@ -217,72 +182,93 @@ TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchorsForDirecti
 
 void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
 {
-	UWorld* World = GetWorld();
-	if (!World) { return; }
-
 	TSet<ASpawnAnchor*> ReservedAnchors;
 
 	for (const FEnemySpawn& Directive : Wave.Spawns)
 	{
-		if (Directive.Enemy.IsNull())
+		SpawnDirective(Directive, ReservedAnchors);
+	}
+}
+
+void UEncounterDirectorComponent::SpawnDirective(const FEnemySpawn& Directive, TSet<ASpawnAnchor*>& ReservedAnchors)
+{
+	if (Directive.Enemy.IsNull())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: spawn directive has null Enemy class."));
+		return;
+	}
+
+	UClass* EnemyClass = Directive.Enemy.LoadSynchronous();
+	if (!EnemyClass)
+	{
+		return;
+	}
+
+	for (int32 i = 0; i < FMath::Max(1, Directive.Count); ++i)
+	{
+		ASpawnAnchor* Anchor = ChooseAnchorForSpawn(EnemyClass, ReservedAnchors);
+		if (!Anchor)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: spawn directive has null Enemy class."));
+			UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: no free anchors for %s."), *EnemyClass->GetName());
 			continue;
 		}
-		UClass* EnemyCls = Directive.Enemy.LoadSynchronous();
-		if (!EnemyCls) { continue; }
 
-		for (int32 i = 0; i < FMath::Max(1, Directive.Count); ++i)
+		const float Lead = FMath::Max(0.f, Directive.PreSpawnLead);
+		if (Lead > 0.f)
 		{
-			TArray<ASpawnAnchor*> Candidates = GetAvailableAnchorsForDirective(Directive, EnemyCls, &ReservedAnchors);
-			if (Candidates.Num() == 0)
-			{
-				// Fallback: cualquier anchor con el tag, ignorando FOV/distancia, pero nunca ocupacion/reserva.
-				const ACombatArena* Arena = GetArena();
-				if (Arena)
-				{
-					for (const TObjectPtr<ASpawnAnchor>& A : Arena->Anchors)
-					{
-						if (!A) continue;
-						if (ReservedAnchors.Contains(A.Get())) continue;
-						if (Directive.AnchorTag.IsValid() && !A->AnchorTags.HasTag(Directive.AnchorTag)) continue;
-						if (A->IsSpawnLocationOccupied(EnemyCls)) continue;
-						Candidates.Add(A);
-					}
-				}
-			}
-			if (Candidates.Num() == 0)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: no anchors for directive tag '%s'."),
-					*Directive.AnchorTag.ToString());
-				continue;
-			}
+			ScheduleSpawn(EnemyClass, Anchor, Lead);
+		}
+		else
+		{
+			TrackSpawnedEnemy(Anchor->PerformSpawn(EnemyClass));
+		}
+	}
+}
 
-			ASpawnAnchor* Picked = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
-			ReservedAnchors.Add(Picked);
-			const float Lead = Picked->ResolveLead(Directive);
-
-			Picked->PlayTelegraph(Directive);
-
-			if (Lead > 0.f)
+ASpawnAnchor* UEncounterDirectorComponent::ChooseAnchorForSpawn(TSubclassOf<AActor> EnemyClass, TSet<ASpawnAnchor*>& ReservedAnchors) const
+{
+	TArray<ASpawnAnchor*> Candidates = GetAvailableAnchors(EnemyClass, &ReservedAnchors);
+	if (Candidates.IsEmpty())
+	{
+		const ACombatArena* Arena = GetArena();
+		if (Arena)
+		{
+			for (const TObjectPtr<ASpawnAnchor>& Anchor : Arena->Anchors)
 			{
-				const int32 Idx = PendingSpawns.Num();
-				FPendingSpawn Pending;
-				Pending.EnemyClass = EnemyCls;
-				Pending.Anchor = Picked;
-				Pending.Directive = Directive;
-				PendingSpawns.Add(MoveTemp(Pending));
-				FTimerDelegate TimerDel;
-				TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, Idx);
-				World->GetTimerManager().SetTimer(PendingSpawns[Idx].TimerHandle, TimerDel, Lead, false);
-			}
-			else
-			{
-				AActor* Spawned = Picked->PerformSpawn(EnemyCls, Directive);
-				TrackSpawnedEnemy(Spawned);
+				if (!Anchor) { continue; }
+				if (ReservedAnchors.Contains(Anchor.Get())) { continue; }
+				if (Anchor->IsSpawnLocationOccupied(EnemyClass)) { continue; }
+				Candidates.Add(Anchor);
 			}
 		}
 	}
+
+	if (Candidates.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	ASpawnAnchor* Picked = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+	ReservedAnchors.Add(Picked);
+	return Picked;
+}
+
+void UEncounterDirectorComponent::ScheduleSpawn(TSubclassOf<AActor> EnemyClass, ASpawnAnchor* Anchor, float LeadSeconds)
+{
+	UWorld* World = GetWorld();
+	if (!World || !Anchor || !EnemyClass)
+	{
+		return;
+	}
+
+	const int32 PendingIndex = PendingSpawns.AddDefaulted();
+	FPendingSpawn& Pending = PendingSpawns[PendingIndex];
+	Pending.EnemyClass = EnemyClass;
+	Pending.Anchor = Anchor;
+
+	FTimerDelegate TimerDel;
+	TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, PendingIndex);
+	World->GetTimerManager().SetTimer(Pending.TimerHandle, TimerDel, LeadSeconds, false);
 }
 
 void UEncounterDirectorComponent::ExecutePendingSpawn(int32 PendingIndex)
@@ -290,43 +276,55 @@ void UEncounterDirectorComponent::ExecutePendingSpawn(int32 PendingIndex)
 	if (!PendingSpawns.IsValidIndex(PendingIndex)) { return; }
 
 	FPendingSpawn& Pending = PendingSpawns[PendingIndex];
-	if (!Pending.Anchor.IsValid() || !Pending.EnemyClass) { return; }
-
-	if (Pending.Anchor->IsSpawnLocationOccupied(Pending.EnemyClass))
+	if (!TryPreparePendingSpawn(Pending, PendingIndex))
 	{
-		TArray<ASpawnAnchor*> Candidates = GetAvailableAnchorsForDirective(Pending.Directive, Pending.EnemyClass);
-		if (Candidates.Num() > 0)
-		{
-			Pending.Anchor = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
-		}
-		else if (Pending.RetryCount < 10)
-		{
-			++Pending.RetryCount;
-			if (UWorld* World = GetWorld())
-			{
-				FTimerDelegate TimerDel;
-				TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, PendingIndex);
-				World->GetTimerManager().SetTimer(Pending.TimerHandle, TimerDel, 0.35f, false);
-			}
-			return;
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: skipping spawn for %s; no free anchor after retries."),
-				*Pending.EnemyClass->GetName());
-			return;
-		}
+		return;
 	}
 
-	AActor* Spawned = Pending.Anchor->PerformSpawn(Pending.EnemyClass, Pending.Directive);
+	AActor* Spawned = Pending.Anchor->PerformSpawn(Pending.EnemyClass);
 	TrackSpawnedEnemy(Spawned);
 
-	// Comprueba si fue el último spawn diferido y no quedan enemigos vivos.
 	if (State == EEncounterState::WaveActive && AliveEnemies.Num() == 0 && !HasActivePendingSpawns())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: all deferred spawns complete but 0 enemies alive; treating as cleared."));
 		HandleWaveCleared();
 	}
+}
+
+bool UEncounterDirectorComponent::TryPreparePendingSpawn(FPendingSpawn& Pending, int32 PendingIndex)
+{
+	if (!Pending.Anchor.IsValid() || !Pending.EnemyClass)
+	{
+		return false;
+	}
+
+	if (!Pending.Anchor->IsSpawnLocationOccupied(Pending.EnemyClass))
+	{
+		return true;
+	}
+
+	TArray<ASpawnAnchor*> Candidates = GetAvailableAnchors(Pending.EnemyClass);
+	if (!Candidates.IsEmpty())
+	{
+		Pending.Anchor = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+		return true;
+	}
+
+	if (Pending.RetryCount < 10)
+	{
+		++Pending.RetryCount;
+		if (UWorld* World = GetWorld())
+		{
+			FTimerDelegate TimerDel;
+			TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, PendingIndex);
+			World->GetTimerManager().SetTimer(Pending.TimerHandle, TimerDel, 0.35f, false);
+		}
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: skipping spawn for %s; no free anchor after retries."),
+		*Pending.EnemyClass->GetName());
+	return false;
 }
 
 void UEncounterDirectorComponent::CancelPendingSpawns()
@@ -350,12 +348,7 @@ void UEncounterDirectorComponent::TrackSpawnedEnemy(AActor* Enemy)
 
 void UEncounterDirectorComponent::ReleaseAliveEnemiesToPool()
 {
-	UObjectPoolSubsystem* Pool = nullptr;
-	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
-	{
-		Pool = GI->GetSubsystem<UObjectPoolSubsystem>();
-	}
-
+	UObjectPoolSubsystem* Pool = GetPool();
 	for (const TWeakObjectPtr<AActor>& E : AliveEnemies)
 	{
 		if (!E.IsValid()) { continue; }
@@ -403,34 +396,31 @@ bool UEncounterDirectorComponent::HasActivePendingSpawns() const
 	return false;
 }
 
-void UEncounterDirectorComponent::EvaluateWaveContinuation()
+bool UEncounterDirectorComponent::ShouldAdvanceWave(const FWaveContinuation& Rule, int32 Remaining) const
 {
-	const FEncounterWave* Wave = GetCurrentWave();
-	if (!Wave) { return; }
-
-	if (HasActivePendingSpawns()) { return; }
-
-	const int32 Remaining = GetAliveEnemyCount();
-	const FWaveContinuation& Rule = Wave->Continuation;
-
-	bool bAdvance = false;
 	switch (Rule.Mode)
 	{
 	case EWaveContinuationMode::OnAllCleared:
-		bAdvance = (Remaining == 0);
-		break;
+		return Remaining == 0;
 	case EWaveContinuationMode::OnRemainingAtOrBelow:
-		bAdvance = (Remaining <= Rule.RemainingThreshold);
-		break;
+		return Remaining <= Rule.RemainingThreshold;
 	case EWaveContinuationMode::OnElapsedSince:
-		bAdvance = (WaveElapsed >= Rule.ElapsedSeconds);
-		break;
+		return WaveElapsed >= Rule.ElapsedSeconds;
 	case EWaveContinuationMode::Hybrid:
-		bAdvance = (Remaining <= Rule.RemainingThreshold) || (WaveElapsed >= Rule.ElapsedSeconds);
-		break;
+		return Remaining <= Rule.RemainingThreshold || WaveElapsed >= Rule.ElapsedSeconds;
+	}
+	return false;
+}
+
+void UEncounterDirectorComponent::EvaluateWaveContinuation()
+{
+	const FEncounterWave* Wave = GetCurrentWave();
+	if (!Wave || HasActivePendingSpawns())
+	{
+		return;
 	}
 
-	if (bAdvance)
+	if (ShouldAdvanceWave(Wave->Continuation, GetAliveEnemyCount()))
 	{
 		HandleWaveCleared();
 	}
@@ -440,11 +430,7 @@ void UEncounterDirectorComponent::HandleWaveCleared()
 {
 	if (State != EEncounterState::WaveActive) { return; }
 
-	const FEncounterWave* Wave = GetCurrentWave();
-	if (Wave) { FireBanter(Wave->BanterEndTag); }
-
 	State = EEncounterState::PostClear;
-	OnWaveCleared.Broadcast(CurrentWaveIndex);
 
 	const UEncounterConfig* Cfg = GetConfig();
 	const bool bLastWave = Cfg && !Cfg->Waves.IsValidIndex(CurrentWaveIndex + 1);
@@ -477,35 +463,14 @@ void UEncounterDirectorComponent::HandleEncounterCleared()
 	ReleaseAliveEnemiesToPool();
 	AliveEnemies.Reset();
 
-	// Desuscribir de los eventos del pool.
-	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
+	if (UObjectPoolSubsystem* Pool = GetPool())
 	{
-		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
-		{
-			Pool->OnActorReleased.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
-		}
+		Pool->OnActorReleased.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
 	}
 
+	if (ACombatArena* Arena = GetArena())
+	{
+		Arena->NotifyEncounterCleared();
+	}
 	OnEncounterCleared.Broadcast();
-}
-
-void UEncounterDirectorComponent::HandleEncounterFailed()
-{
-	if (State == EEncounterState::Failed) { return; }
-	State = EEncounterState::Failed;
-	SetComponentTickEnabled(false);
-	CancelPendingSpawns();
-	ReleaseAliveEnemiesToPool();
-	AliveEnemies.Reset();
-
-	// Desuscribir de los eventos del pool.
-	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
-	{
-		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
-		{
-			Pool->OnActorReleased.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
-		}
-	}
-
-	OnEncounterFailed.Broadcast();
 }

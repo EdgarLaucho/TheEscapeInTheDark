@@ -37,7 +37,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
 	bool bMarkSeenOnComplete = true;
 
-	/** If true, this ambient trigger auto-advances but locks player movement until it ends. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dialogue")
 	bool bBlockMovementDuringDialogue = false;
 
@@ -49,9 +48,7 @@ protected:
 
 private:
 	UFUNCTION()
-	void HandleBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
-		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-		bool bFromSweep, const FHitResult& SweepResult);
+	void HandleBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
 	bool bTriggeredThisSession = false;
 };

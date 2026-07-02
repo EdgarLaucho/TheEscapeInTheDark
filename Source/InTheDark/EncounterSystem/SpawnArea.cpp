@@ -8,9 +8,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/CapsuleComponent.h"
-#include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
-#include "NavigationSystem.h"
 #include "TimerManager.h"
 
 namespace
@@ -84,8 +82,6 @@ ASpawnArea::ASpawnArea()
 #endif
 }
 
-// ── Ciclo de vida ────────────────────────────────────────────────────────────
-
 void ASpawnArea::BeginPlay()
 {
 	Super::BeginPlay();
@@ -116,8 +112,6 @@ void ASpawnArea::OnConstruction(const FTransform& Transform)
 	}
 }
 
-// ── Activación / desactivación ───────────────────────────────────────────────
-
 void ASpawnArea::Activate()
 {
 	SpawnQuota = 0;
@@ -125,12 +119,9 @@ void ASpawnArea::Activate()
 
 	ApplyLeashStateToActiveEnemies();
 
-	GetWorld()->GetTimerManager().SetTimer(
-		SpawnTimerHandle, this, &ASpawnArea::TrySpawn,
-		Rules.SpawnInterval, /*bLoop=*/true, Rules.InitialSpawnDelay);
+	GetWorld()->GetTimerManager().SetTimer(SpawnTimerHandle, this, &ASpawnArea::TrySpawn, Rules.SpawnInterval, true, Rules.InitialSpawnDelay);
 
-	GetWorld()->GetTimerManager().SetTimer(
-		LeashTimerHandle, this, &ASpawnArea::EnforceLeash, 0.5f, /*bLoop=*/true);
+	GetWorld()->GetTimerManager().SetTimer(LeashTimerHandle, this, &ASpawnArea::EnforceLeash, 0.5f, true);
 }
 
 void ASpawnArea::Deactivate()
@@ -141,12 +132,11 @@ void ASpawnArea::Deactivate()
 
 	if (!ActiveEnemies.IsEmpty())
 	{
-		GetWorld()->GetTimerManager().SetTimer(
-			DespawnCheckHandle, this, &ASpawnArea::CheckDespawnOnLeave, 0.5f, /*bLoop=*/true);
+		GetWorld()->GetTimerManager().SetTimer(DespawnCheckHandle, this, &ASpawnArea::CheckDespawnOnLeave, 0.5f, true);
 	}
 }
 
-void ASpawnArea::SetPlayerInside(bool bNewPlayerInside, bool bBroadcastEvents)
+void ASpawnArea::SetPlayerInside(bool bNewPlayerInside)
 {
 	if (bPlayerInside == bNewPlayerInside) { return; }
 
@@ -155,18 +145,10 @@ void ASpawnArea::SetPlayerInside(bool bNewPlayerInside, bool bBroadcastEvents)
 	if (bPlayerInside)
 	{
 		Activate();
-		if (bBroadcastEvents)
-		{
-			OnPlayerEntered.Broadcast();
-		}
 	}
 	else
 	{
 		Deactivate();
-		if (bBroadcastEvents)
-		{
-			OnPlayerLeft.Broadcast();
-		}
 	}
 }
 
@@ -189,32 +171,6 @@ bool ASpawnArea::IsPlayerInsideArea() const
 	return FVector::DistSquared(Player->GetActorLocation(), ActivationVolume->GetComponentLocation()) <= FMath::Square(Radius);
 }
 
-// ── API pública ──────────────────────────────────────────────────────────────
-
-int32 ASpawnArea::GetActiveEnemyCount() const
-{
-	int32 Count = 0;
-	for (const TWeakObjectPtr<AActor>& W : ActiveEnemies)
-	{
-		if (W.IsValid()) { ++Count; }
-	}
-	return Count;
-}
-
-void ASpawnArea::ForceActivate()
-{
-	SetPlayerInside(true, false);
-}
-
-void ASpawnArea::ForceDeactivate()
-{
-	bPlayerInside = false;
-	GetWorld()->GetTimerManager().ClearTimer(SpawnTimerHandle);
-	GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
-	GetWorld()->GetTimerManager().ClearTimer(DespawnCheckHandle);
-	DespawnAll();
-}
-
 void ASpawnArea::DespawnAll()
 {
 	TArray<TWeakObjectPtr<AActor>> ToRelease = ActiveEnemies;
@@ -228,34 +184,7 @@ void ASpawnArea::DespawnAll()
 	ActiveEnemies.Empty();
 }
 
-void ASpawnArea::AutoBindAnchorsInRadius()
-{
-	BoundAnchors.Empty();
-
-	UWorld* World = GetWorld();
-	if (!World) { return; }
-
-	TArray<AActor*> Found;
-	UGameplayStatics::GetAllActorsOfClass(World, ASpawnAnchor::StaticClass(), Found);
-
-	const float RadiusSq = FMath::Square(Rules.AreaRadius);
-	for (AActor* Actor : Found)
-	{
-		if (FVector::DistSquared(Actor->GetActorLocation(), GetActorLocation()) <= RadiusSq)
-		{
-			BoundAnchors.Add(Cast<ASpawnAnchor>(Actor));
-		}
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("ASpawnArea [%s]: AutoBind encontró %d anchors dentro del radio."),
-		*GetName(), BoundAnchors.Num());
-}
-
-// ── Callbacks de overlap ─────────────────────────────────────────────────────
-
-void ASpawnArea::OnOverlapBegin(UPrimitiveComponent* /*Comp*/, AActor* Other,
-                                UPrimitiveComponent* /*OtherComp*/, int32 /*BodyIndex*/,
-                                bool /*bFromSweep*/, const FHitResult& /*Hit*/)
+void ASpawnArea::OnOverlapBegin(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC || Other != PC->GetPawn()) { return; }
@@ -263,11 +192,13 @@ void ASpawnArea::OnOverlapBegin(UPrimitiveComponent* /*Comp*/, AActor* Other,
 	SetPlayerInside(true);
 }
 
-void ASpawnArea::OnOverlapEnd(UPrimitiveComponent* /*Comp*/, AActor* Other,
-                              UPrimitiveComponent* /*OtherComp*/, int32 /*BodyIndex*/)
+void ASpawnArea::OnOverlapEnd(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32)
 {
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC || Other != PC->GetPawn()) { return; }
+	if (!PC || Other != PC->GetPawn())
+	{ 
+		return; 
+	}
 
 	RefreshPlayerInsideState();
 }
@@ -279,25 +210,23 @@ void ASpawnArea::OnEnemyDestroyed(AActor* DestroyedActor)
 		return W.Get() == DestroyedActor;
 	});
 
-	// Si ya no quedan enemigos y el jugador tampoco está, notificar área despejada.
 	CleanDeadEntries();
 	if (ActiveEnemies.IsEmpty() && !bPlayerInside)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
 		GetWorld()->GetTimerManager().ClearTimer(DespawnCheckHandle);
-		OnAreaCleared.Broadcast();
 	}
 }
-
-// ── Lógica periódica ─────────────────────────────────────────────────────────
 
 void ASpawnArea::TrySpawn()
 {
 	CleanDeadEntries();
 
-	if (ActiveEnemies.Num() >= Rules.MaxSimultaneous) { return; }
+	if (ActiveEnemies.Num() >= Rules.MaxSimultaneous) 
+	{ 
+		return; 
+	}
 
-	// Si no respawnea en muerte, parar cuando el cupo inicial esté cubierto.
 	if (!Rules.bRespawnOnDeath && SpawnQuota >= Rules.MaxSimultaneous)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(SpawnTimerHandle);
@@ -305,53 +234,67 @@ void ASpawnArea::TrySpawn()
 	}
 
 	TSubclassOf<AActor> EnemyClass = PickEnemyClass();
-	if (!EnemyClass) { return; }
+	if (!EnemyClass) 
+	{ 
+		return; 
+	}
 
-	// Determinar transform de spawn.
+	RegisterSpawnedEnemy(SpawnEnemy(EnemyClass));
+}
+
+ASpawnAnchor* ASpawnArea::ChooseBoundAnchorForSpawn(TSubclassOf<AActor> EnemyClass) const
+{
+	if (BoundAnchors.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	const AActor* Player = GetPlayerActor();
+	TArray<ASpawnAnchor*> Available;
+	for (const TObjectPtr<ASpawnAnchor>& Anchor : BoundAnchors)
+	{
+		if (!Anchor) { continue; }
+		if (!Anchor->IsAvailableForSpawn(Player)) { continue; }
+		if (Anchor->IsSpawnLocationOccupied(EnemyClass)) { continue; }
+		Available.Add(Anchor);
+	}
+
+	return Available.IsEmpty() ? nullptr : Available[FMath::RandRange(0, Available.Num() - 1)];
+}
+
+AActor* ASpawnArea::SpawnEnemy(TSubclassOf<AActor> EnemyClass)
+{
+	if (ASpawnAnchor* Anchor = ChooseBoundAnchorForSpawn(EnemyClass))
+	{
+		if (AActor* Spawned = Anchor->PerformSpawn(EnemyClass))
+		{
+			return Spawned;
+		}
+	}
+
 	FTransform SpawnTransform;
-	bool bFound = false;
-
-	if (!BoundAnchors.IsEmpty())
+	if (!GetRandomSpawnTransform(SpawnTransform))
 	{
-		const AActor* Player = GetPlayerActor();
-		TArray<ASpawnAnchor*> Available;
-		for (const TObjectPtr<ASpawnAnchor>& Anchor : BoundAnchors)
-		{
-			if (Anchor && Anchor->IsAvailableForSpawn(Player))
-			{
-				Available.Add(Anchor);
-			}
-		}
-		if (!Available.IsEmpty())
-		{
-			ASpawnAnchor* Chosen = Available[FMath::RandRange(0, Available.Num() - 1)];
-			SpawnTransform = Chosen->GetActorTransform();
-			bFound = true;
-		}
+		return nullptr;
 	}
-
-	if (!bFound)
-	{
-		bFound = GetRandomSpawnTransform(SpawnTransform);
-	}
-
-	if (!bFound) { return; }
 
 	SpawnTransform = BuildSpawnAreaGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
 
-	// Intentar adquirir del pool; si falla, spawn directo.
-	AActor* Spawned = nullptr;
 	if (UObjectPoolSubsystem* Pool = GetPool())
 	{
-		Spawned = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform);
-	}
-	if (!Spawned)
-	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		Spawned = GetWorld()->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params);
+		if (AActor* Spawned = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform))
+		{
+			return Spawned;
+		}
 	}
 
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	return GetWorld() ? GetWorld()->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params) : nullptr;
+}
+
+void ASpawnArea::RegisterSpawnedEnemy(AActor* Spawned)
+{
 	if (IsValid(Spawned))
 	{
 		Spawned->OnDestroyed.AddDynamic(this, &ASpawnArea::OnEnemyDestroyed);
@@ -370,22 +313,25 @@ void ASpawnArea::EnforceLeash()
 	{
 		if (!bPlayerInside)
 			GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
+
 		return;
 	}
 
-	// Catch-up: asegura el estado correcto si algún enemigo spawneó
-	// después del cambio de bPlayerInside (evita el delay del timer).
 	for (const TWeakObjectPtr<AActor>& WeakEnemy : ActiveEnemies)
 	{
 		AActor* Enemy = WeakEnemy.Get();
-		if (!Enemy) { continue; }
+
+		if (!Enemy) 
+		{ 
+			continue; 
+		}
+
 		ApplyLeashState(Enemy);
 	}
 }
 
 void ASpawnArea::CheckDespawnOnLeave()
 {
-	// Si el jugador volvió al overlap, el timer ya fue cancelado en Activate().
 	if (bPlayerInside)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(DespawnCheckHandle);
@@ -395,7 +341,6 @@ void ASpawnArea::CheckDespawnOnLeave()
 	const AActor* Player = GetPlayerActor();
 	if (!Player) { return; }
 
-	// Solo despawnear cuando el jugador supera AreaRadius + DespawnOffset.
 	const float DespawnRadiusSq = FMath::Square(Rules.AreaRadius + Rules.DespawnOffset);
 	if (FVector::DistSquared(Player->GetActorLocation(), GetActorLocation()) < DespawnRadiusSq)
 	{
@@ -408,7 +353,10 @@ void ASpawnArea::CheckDespawnOnLeave()
 	for (const TWeakObjectPtr<AActor>& WeakEnemy : ActiveEnemies)
 	{
 		AActor* Enemy = WeakEnemy.Get();
-		if (!Enemy) { continue; }
+		if (!Enemy) 
+		{ 
+			continue; 
+		}
 
 		if (!Rules.bRequireOutOfSightToDespawn || !IsVisibleToPlayer(Enemy))
 		{
@@ -427,18 +375,21 @@ void ASpawnArea::CheckDespawnOnLeave()
 	{
 		GetWorld()->GetTimerManager().ClearTimer(DespawnCheckHandle);
 		GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
-		OnAreaCleared.Broadcast();
 	}
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 void ASpawnArea::ReleaseEnemy(AActor* Enemy)
 {
-	if (!Enemy) { return; }
+	if (!Enemy)
+	{ 
+		return; 
+	}
 
 	Enemy->OnDestroyed.RemoveDynamic(this, &ASpawnArea::OnEnemyDestroyed);
-	ActiveEnemies.RemoveAll([Enemy](const TWeakObjectPtr<AActor>& W) { return W.Get() == Enemy; });
+	ActiveEnemies.RemoveAll([Enemy](const TWeakObjectPtr<AActor>& W) 
+	{ 
+		return W.Get() == Enemy; 
+	});
 
 	if (UObjectPoolSubsystem* Pool = GetPool())
 	{
@@ -452,10 +403,16 @@ void ASpawnArea::ReleaseEnemy(AActor* Enemy)
 
 void ASpawnArea::ApplyLeashState(AActor* Enemy) const
 {
-	if (!Enemy) { return; }
+	if (!Enemy) 
+	{ 
+		return; 
+	}
 
 	ULeashComponent* Leash = Enemy->FindComponentByClass<ULeashComponent>();
-	if (!Leash) { return; }
+	if (!Leash) 
+	{ 
+		return; 
+	}
 
 	if (bPlayerInside)
 	{
@@ -466,49 +423,11 @@ void ASpawnArea::ApplyLeashState(AActor* Enemy) const
 	}
 	else
 	{
-		// Solo activar una vez con el centro del área como origen del random walk.
 		if (!Leash->IsLeashActive())
 		{
 			Leash->ActivateLeash(GetActorLocation());
 		}
 	}
-}
-
-FVector ASpawnArea::GetClosestPointInAreaToPlayer() const
-{
-	const FVector AreaCenter = GetActorLocation();
-
-	const AActor* Player = GetPlayerActor();
-	if (!Player) { return AreaCenter; }
-
-	// Margen interior para que el destino quede claramente DENTRO del área
-	// (no pegado al borde) y los enemigos no terminen sobre el límite del leash.
-	static constexpr float InnerMargin = 150.f;
-	const float MaxDist = FMath::Max(0.f, Rules.AreaRadius - InnerMargin);
-
-	// Dirección horizontal del centro del área hacia el jugador.
-	FVector ToPlayer = Player->GetActorLocation() - AreaCenter;
-	ToPlayer.Z = 0.f;
-	const float DistToPlayer = ToPlayer.Size();
-	const FVector Dir = DistToPlayer > KINDA_SMALL_NUMBER ? ToPlayer / DistToPlayer : GetActorForwardVector();
-
-	// Punto del área más cercano al jugador: como el jugador está fuera al salir,
-	// es el del borde en su dirección, recortado por el margen interior.
-	const FVector Point = AreaCenter + Dir * FMath::Min(DistToPlayer, MaxDist);
-
-	// Proyectar al NavMesh para garantizar que el destino sea alcanzable; si no
-	// hay navegación o no encuentra punto cercano, se usa el calculado.
-	if (const UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
-	{
-		FNavLocation Projected;
-		const FVector QueryExtent(250.f, 250.f, 500.f);
-		if (NavSys->ProjectPointToNavigation(Point, Projected, QueryExtent))
-		{
-			return Projected.Location;
-		}
-	}
-
-	return Point;
 }
 
 void ASpawnArea::ApplyLeashStateToActiveEnemies() const
@@ -522,7 +441,10 @@ void ASpawnArea::ApplyLeashStateToActiveEnemies() const
 bool ASpawnArea::IsVisibleToPlayer(const AActor* Enemy) const
 {
 	const AActor* Player = GetPlayerActor();
-	if (!Player || !Enemy) { return false; }
+	if (!Player || !Enemy) 
+	{ 
+		return false;
+	}
 
 	const FVector ToEnemy = (Enemy->GetActorLocation() - Player->GetActorLocation()).GetSafeNormal();
 	const float CosHalfAngle = FMath::Cos(FMath::DegreesToRadians(Rules.VisibilityConeHalfAngle));
@@ -538,13 +460,11 @@ bool ASpawnArea::GetRandomSpawnTransform(FTransform& OutTransform) const
 
 	for (int32 Attempt = 0; Attempt < 8; ++Attempt)
 	{
-		// Punto aleatorio en el disco horizontal del área.
 		const FVector2D RandDir = FMath::RandPointInCircle(1.f);
 		const float Dist = FMath::RandRange(MinSpawnDist, Rules.AreaRadius);
 		FVector Candidate = Center + FVector(RandDir.X, RandDir.Y, 0.f) * Dist;
 		Candidate.Z = Center.Z + 100.f;
 
-		// Traza al suelo para pegar el spawn al terreno.
 		if (UWorld* World = GetWorld())
 		{
 			FHitResult Hit;
@@ -554,7 +474,6 @@ bool ASpawnArea::GetRandomSpawnTransform(FTransform& OutTransform) const
 			}
 		}
 
-		// Rechazar si está demasiado cerca del jugador.
 		if (Player && FVector::DistSquared(Candidate, Player->GetActorLocation()) < FMath::Square(MinPlayerDist))
 		{
 			continue;
@@ -570,30 +489,44 @@ bool ASpawnArea::GetRandomSpawnTransform(FTransform& OutTransform) const
 
 TSubclassOf<AActor> ASpawnArea::PickEnemyClass() const
 {
-	struct FEligible { TSubclassOf<AActor> Class; float Weight; };
-	TArray<FEligible> Eligible;
 	float TotalWeight = 0.f;
 
 	for (const FSpawnAreaEntry& Entry : EnemyEntries)
 	{
-		if (!Entry.EnemyClass) { continue; }
+		if (!Entry.EnemyClass) 
+		{
+			 continue; 
+		}
+
 		if (CountActiveOfClass(Entry.EnemyClass) < Entry.MaxCount)
 		{
-			Eligible.Add({ Entry.EnemyClass, Entry.Weight });
 			TotalWeight += Entry.Weight;
 		}
 	}
 
-	if (Eligible.IsEmpty() || TotalWeight <= 0.f) { return nullptr; }
-
-	float Rand = FMath::RandRange(0.f, TotalWeight);
-	for (const FEligible& E : Eligible)
-	{
-		Rand -= E.Weight;
-		if (Rand <= 0.f) { return E.Class; }
+	if (TotalWeight <= 0.f)
+	{ 
+		return nullptr; 
 	}
 
-	return Eligible.Last().Class;
+	float Rand = FMath::RandRange(0.f, TotalWeight);
+	TSubclassOf<AActor> LastEligible = nullptr;
+	for (const FSpawnAreaEntry& Entry : EnemyEntries)
+	{
+		if (!Entry.EnemyClass || CountActiveOfClass(Entry.EnemyClass) >= Entry.MaxCount)
+		{
+			continue;
+		}
+
+		LastEligible = Entry.EnemyClass;
+		Rand -= Entry.Weight;
+		if (Rand <= 0.f) 
+		{
+			return Entry.EnemyClass;
+		}
+	}
+
+	return LastEligible;
 }
 
 int32 ASpawnArea::CountActiveOfClass(TSubclassOf<AActor> Class) const
@@ -602,20 +535,31 @@ int32 ASpawnArea::CountActiveOfClass(TSubclassOf<AActor> Class) const
 	for (const TWeakObjectPtr<AActor>& W : ActiveEnemies)
 	{
 		const AActor* A = W.Get();
-		if (A && A->GetClass()->IsChildOf(Class)) { ++Count; }
+		if (A && A->GetClass()->IsChildOf(Class))
+		{ 
+			++Count; 
+		}
 	}
+
 	return Count;
 }
 
 void ASpawnArea::CleanDeadEntries()
 {
-	ActiveEnemies.RemoveAll([](const TWeakObjectPtr<AActor>& W) { return !W.IsValid(); });
+	ActiveEnemies.RemoveAll([](const TWeakObjectPtr<AActor>& W)
+	{ 
+		return !W.IsValid(); 
+	});
 }
 
 AActor* ASpawnArea::GetPlayerActor() const
 {
 	const UWorld* World = GetWorld();
-	if (!World) { return nullptr; }
+	if (!World) 
+	{ 
+		return nullptr; 
+	}
+
 	const APlayerController* PC = World->GetFirstPlayerController();
 	return PC ? PC->GetPawn() : nullptr;
 }

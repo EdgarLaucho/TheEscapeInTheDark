@@ -34,13 +34,7 @@ void ADialogueTrigger::BeginPlay()
 	}
 }
 
-void ADialogueTrigger::HandleBeginOverlap(
-	UPrimitiveComponent*,
-	AActor* OtherActor,
-	UPrimitiveComponent*,
-	int32,
-	bool,
-	const FHitResult&)
+void ADialogueTrigger::HandleBeginOverlap(UPrimitiveComponent*, AActor* OtherActor, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	if ((bTriggerOnce && bTriggeredThisSession) || !DialogueData || DialogueID.IsNone()) return;
 
@@ -59,11 +53,5 @@ void ADialogueTrigger::HandleBeginOverlap(
 	if (!DialogueSubsystem || DialogueSubsystem->IsDialogueActive()) return;
 
 	bTriggeredThisSession = true;
-	DialogueSubsystem->StartAmbientDialogue(
-		DialogueData,
-		DialogueID,
-		PC,
-		bMarkSeenOnComplete,
-		LineHoldSeconds,
-		bBlockMovementDuringDialogue);
+	DialogueSubsystem->StartAmbientDialogue(DialogueData, DialogueID, PC, bMarkSeenOnComplete, LineHoldSeconds, bBlockMovementDuringDialogue);
 }

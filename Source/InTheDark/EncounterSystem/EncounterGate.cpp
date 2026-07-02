@@ -5,6 +5,29 @@
 #include "TimerManager.h"
 #include "UObject/UnrealType.h"
 
+namespace
+{
+	float ReadFloatPropertyByName(const UObject* Object, FName PropertyName)
+	{
+		if (!Object)
+		{
+			return 0.f;
+		}
+
+		if (const FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(Object->GetClass(), PropertyName))
+		{
+			return static_cast<float>(DoubleProperty->GetPropertyValue_InContainer(Object));
+		}
+
+		if (const FFloatProperty* FloatProperty = FindFProperty<FFloatProperty>(Object->GetClass(), PropertyName))
+		{
+			return FloatProperty->GetPropertyValue_InContainer(Object);
+		}
+
+		return 0.f;
+	}
+}
+
 AEncounterGate::AEncounterGate()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -41,8 +64,6 @@ void AEncounterGate::Unlock()
 {
 	if (!bLocked) { return; }
 	bLocked = false;
-	// Disable collision immediately so the player can pass while the Blueprint
-	// keeps the mesh visible for the sink/open animation.
 	SetGateCollisionEnabled(false);
 	StartGateMove(false);
 	OnGateUnlocked();
@@ -99,12 +120,7 @@ void AEncounterGate::StartGateMove(bool bClosed)
 		return;
 	}
 
-	World->GetTimerManager().SetTimer(
-		GateMoveTimerHandle,
-		this,
-		&AEncounterGate::UpdateGateMove,
-		1.f / 60.f,
-		true);
+	World->GetTimerManager().SetTimer(GateMoveTimerHandle, this, &AEncounterGate::UpdateGateMove, 1.f / 60.f, true);
 }
 
 void AEncounterGate::UpdateGateMove()
@@ -115,6 +131,7 @@ void AEncounterGate::UpdateGateMove()
 		{
 			World->GetTimerManager().ClearTimer(GateMoveTimerHandle);
 		}
+
 		return;
 	}
 
@@ -122,9 +139,7 @@ void AEncounterGate::UpdateGateMove()
 	const float DeltaSeconds = World ? World->GetDeltaSeconds() : 1.f / 60.f;
 	MoveElapsedSeconds += DeltaSeconds;
 
-	const float Alpha = MoveDurationSeconds > KINDA_SMALL_NUMBER
-		? FMath::Clamp(MoveElapsedSeconds / MoveDurationSeconds, 0.f, 1.f)
-		: 1.f;
+	const float Alpha = MoveDurationSeconds > KINDA_SMALL_NUMBER ? FMath::Clamp(MoveElapsedSeconds / MoveDurationSeconds, 0.f, 1.f) : 1.f;
 	const float SmoothAlpha = FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f);
 	MeshComponent->SetRelativeLocation(FMath::Lerp(MoveStartRelativeLocation, MoveTargetRelativeLocation, SmoothAlpha));
 
@@ -159,30 +174,10 @@ FVector AEncounterGate::GetOpenRelativeLocation() const
 
 float AEncounterGate::GetConfiguredSinkDepthOffset() const
 {
-	if (const FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(GetClass(), TEXT("SinkDepthOffset")))
-	{
-		return static_cast<float>(DoubleProperty->GetPropertyValue_InContainer(this));
-	}
-
-	if (const FFloatProperty* FloatProperty = FindFProperty<FFloatProperty>(GetClass(), TEXT("SinkDepthOffset")))
-	{
-		return FloatProperty->GetPropertyValue_InContainer(this);
-	}
-
-	return 0.f;
+	return ReadFloatPropertyByName(this, TEXT("SinkDepthOffset"));
 }
 
 float AEncounterGate::GetConfiguredSinkTime() const
 {
-	if (const FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(GetClass(), TEXT("SinkTime")))
-	{
-		return static_cast<float>(DoubleProperty->GetPropertyValue_InContainer(this));
-	}
-
-	if (const FFloatProperty* FloatProperty = FindFProperty<FFloatProperty>(GetClass(), TEXT("SinkTime")))
-	{
-		return FloatProperty->GetPropertyValue_InContainer(this);
-	}
-
-	return 0.f;
+	return ReadFloatPropertyByName(this, TEXT("SinkTime"));
 }

@@ -5,50 +5,24 @@
 #include "Dialogue/DialogueData.h"
 #include "DialogueWidget.generated.h"
 
-class UTextBlock;
-class UButton;
-class USizeBox;
-class UOverlay;
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueAdvance);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueLineFinished);
 
-UCLASS()
+UCLASS(Abstract)
 class INTHEDARK_API UDialogueWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
+	UFUNCTION(BlueprintImplementableEvent, Category = "Dialogue")
 	void ShowLine(const FDialogueLine& Line);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Dialogue")
 	void SetClickToAdvanceEnabled(bool bEnabled);
 
-	UPROPERTY(BlueprintAssignable)
+	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Dialogue")
 	FOnDialogueAdvance OnAdvanceRequested;
 
-	UPROPERTY(BlueprintAssignable)
+	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Dialogue")
 	FOnDialogueLineFinished OnLineFinishedRevealing;
-
-protected:
-	virtual void NativeOnInitialized() override;
-
-private:
-	void BuildLayout();
-
-	UFUNCTION()
-	void HandleClick();
-
-	void TickTypewriter();
-	void FinishTypewriter();
-
-	UTextBlock* DialogueText  = nullptr;
-	UTextBlock* HintText      = nullptr;
-	UButton*    ClickCatcher  = nullptr;
-
-	FString      FullLineText;
-	int32        CurrentCharIndex  = 0;
-	bool         bTypewriterActive = false;
-	bool         bClickToAdvanceEnabled = true;
-	FTimerHandle TypewriterTimer;
-
-	static constexpr float TypewriterInterval = 0.035f;
 };

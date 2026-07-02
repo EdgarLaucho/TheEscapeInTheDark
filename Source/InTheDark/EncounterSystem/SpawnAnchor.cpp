@@ -6,9 +6,6 @@
 #include "GameFramework/PlayerController.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "Sound/SoundBase.h"
-#include "NiagaraSystem.h"
-#include "NiagaraFunctionLibrary.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Engine/OverlapResult.h"
 
@@ -108,7 +105,6 @@ bool ASpawnAnchor::IsAvailableForSpawn(const AActor* PlayerActor) const
 	const UWorld* World = GetWorld();
 	if (!World) { return false; }
 
-	// Comprueba el cooldown.
 	if (PointCooldown > 0.f)
 	{
 		const float Now = World->GetTimeSeconds();
@@ -135,7 +131,6 @@ bool ASpawnAnchor::IsAvailableForSpawn(const AActor* PlayerActor) const
 		const float CosHalfFOV = FMath::Cos(FMath::DegreesToRadians(PlayerFOVAngleDegrees));
 		if (FVector::DotProduct(ViewDir, ToAnchor) > CosHalfFOV)
 		{
-			// Dentro del cono de FOV -> visible, bloquear.
 			return false;
 		}
 	}
@@ -155,8 +150,7 @@ bool ASpawnAnchor::IsSpawnLocationOccupied(TSubclassOf<AActor> EnemyClass) const
 	float HalfHeight = 0.f;
 	GetEncounterSpawnCapsule(EnemyClass, Radius, HalfHeight);
 
-	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(
-		World, EnemyClass, GetActorTransform(), this);
+	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
 
 	TArray<FOverlapResult> Overlaps;
 	FCollisionObjectQueryParams ObjectQueryParams;
@@ -165,13 +159,7 @@ bool ASpawnAnchor::IsSpawnLocationOccupied(TSubclassOf<AActor> EnemyClass) const
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterSpawnOccupancy), false);
 	QueryParams.AddIgnoredActor(this);
 
-	const bool bHasOverlap = World->OverlapMultiByObjectType(
-		Overlaps,
-		SpawnTransform.GetLocation(),
-		FQuat::Identity,
-		ObjectQueryParams,
-		FCollisionShape::MakeCapsule(Radius, HalfHeight),
-		QueryParams);
+	const bool bHasOverlap = World->OverlapMultiByObjectType(Overlaps, SpawnTransform.GetLocation(), FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeCapsule(Radius, HalfHeight), QueryParams);
 
 	if (!bHasOverlap)
 	{
@@ -190,44 +178,7 @@ bool ASpawnAnchor::IsSpawnLocationOccupied(TSubclassOf<AActor> EnemyClass) const
 	return false;
 }
 
-float ASpawnAnchor::ResolveLead(const FEnemySpawn& Directive) const
-{
-	return Directive.PreSpawnLead > 0.f ? Directive.PreSpawnLead : DefaultLeadTime;
-}
-
-void ASpawnAnchor::PlayTelegraph(const FEnemySpawn& Directive) const
-{
-	UWorld* World = GetWorld();
-	if (!World) { return; }
-
-	const TSoftObjectPtr<UNiagaraSystem>& VfxSoft = Directive.PreSpawnVFXOverride.IsNull()
-		? DefaultPreSpawnVFX : Directive.PreSpawnVFXOverride;
-
-	if (!VfxSoft.IsNull())
-	{
-		UNiagaraSystem* Vfx = VfxSoft.LoadSynchronous();
-		if (Vfx)
-		{
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-				World, Vfx, GetActorLocation(), GetActorRotation(),
-					FVector(1.f), /*auto destruir*/ true);
-		}
-	}
-
-	const TSoftObjectPtr<USoundBase>& SfxSoft = Directive.PreSpawnSFXOverride.IsNull()
-		? DefaultPreSpawnSFX : Directive.PreSpawnSFXOverride;
-
-	if (!SfxSoft.IsNull())
-	{
-		USoundBase* Sfx = SfxSoft.LoadSynchronous();
-		if (Sfx)
-		{
-			UGameplayStatics::PlaySoundAtLocation(World, Sfx, GetActorLocation());
-		}
-	}
-}
-
-AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemySpawn& Directive)
+AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -244,12 +195,10 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemyS
 	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
 	if (IsSpawnLocationOccupied(EnemyClass))
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("ASpawnAnchor::PerformSpawn: anchor '%s' is occupied; skipping %s"),
-			*GetName(), *EnemyClass->GetName());
+		UE_LOG(LogTemp, Verbose, TEXT("ASpawnAnchor::PerformSpawn: anchor '%s' is occupied; skipping %s"), *GetName(), *EnemyClass->GetName());
 		return nullptr;
 	}
 
-	// Intenta obtener del ObjectPool primero.
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
 	{
 		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
@@ -259,11 +208,9 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemyS
 			{
 				return Acquired;
 			}
-				// Pool agotado o no registrado — caer al spawn directo.
 		}
 	}
 
-	// Fallback: spawn directo.
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	Params.Owner = GetOwner();
@@ -271,8 +218,8 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass, const FEnemyS
 	AActor* Spawned = World->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params);
 	if (!Spawned)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ASpawnAnchor::PerformSpawn: SpawnActor returned null for %s"),
-			*EnemyClass->GetName());
+		UE_LOG(LogTemp, Error, TEXT("ASpawnAnchor::PerformSpawn: SpawnActor returned null for %s"), *EnemyClass->GetName());
 	}
+
 	return Spawned;
 }

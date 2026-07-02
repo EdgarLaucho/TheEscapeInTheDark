@@ -16,11 +16,9 @@ class INTHEDARK_API IPoolableInterface
 
 public:
 
-	/** Llamado cuando el actor es extraído del pool y activado. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Object Pool")
 	void OnAcquiredFromPool();
 
-	/** Llamado cuando el actor es devuelto al pool y desactivado. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Object Pool")
 	void OnReleasedToPool();
 };
