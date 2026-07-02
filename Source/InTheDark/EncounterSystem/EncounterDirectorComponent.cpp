@@ -4,6 +4,8 @@
 #include "EncounterSystem/SpawnAnchor.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Engine/World.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Pawn.h"
 #include "TimerManager.h"
@@ -98,9 +100,86 @@ void UEncounterDirectorComponent::StartEncounter()
 		Pool->OnActorReleased.AddUniqueDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
 	}
 
-	SetComponentTickEnabled(true);
+	PreloadEncounterClasses();
+}
 
+void UEncounterDirectorComponent::PreloadEncounterClasses()
+{
+	const UEncounterConfig* Cfg = GetConfig();
+	if (!Cfg)
+	{
+		HandleEncounterClassesLoaded();
+		return;
+	}
+
+	TArray<FSoftObjectPath> AssetsToLoad;
+	for (const FEncounterWave& Wave : Cfg->Waves)
+	{
+		for (const FEnemySpawn& Spawn : Wave.Spawns)
+		{
+			const FSoftObjectPath Path = Spawn.Enemy.ToSoftObjectPath();
+			if (Path.IsValid())
+			{
+				AssetsToLoad.AddUnique(Path);
+			}
+		}
+	}
+
+	if (AssetsToLoad.IsEmpty())
+	{
+		HandleEncounterClassesLoaded();
+		return;
+	}
+
+	FStreamableManager& StreamableManager = UAssetManager::GetStreamableManager();
+	EncounterPreloadHandle = StreamableManager.RequestAsyncLoad(
+		AssetsToLoad,
+		FStreamableDelegate::CreateUObject(this, &UEncounterDirectorComponent::HandleEncounterClassesLoaded));
+}
+
+void UEncounterDirectorComponent::HandleEncounterClassesLoaded()
+{
+	PreloadedEnemyClasses.Reset();
+
+	const UEncounterConfig* Cfg = GetConfig();
+	if (Cfg)
+	{
+		for (const FEncounterWave& Wave : Cfg->Waves)
+		{
+			for (const FEnemySpawn& Spawn : Wave.Spawns)
+			{
+				const FSoftObjectPath Path = Spawn.Enemy.ToSoftObjectPath();
+				if (!Path.IsValid())
+				{
+					continue;
+				}
+
+				if (UClass* LoadedClass = Spawn.Enemy.Get())
+				{
+					PreloadedEnemyClasses.Add(Path, LoadedClass);
+				}
+			}
+		}
+	}
+
+	SetComponentTickEnabled(true);
 	BeginNextWave();
+}
+
+TSubclassOf<AActor> UEncounterDirectorComponent::ResolveEnemyClass(const FEnemySpawn& Directive) const
+{
+	const FSoftObjectPath Path = Directive.Enemy.ToSoftObjectPath();
+	if (!Path.IsValid())
+	{
+		return nullptr;
+	}
+
+	if (const TWeakObjectPtr<UClass>* CachedClass = PreloadedEnemyClasses.Find(Path))
+	{
+		return CachedClass->Get();
+	}
+
+	return Directive.Enemy.Get();
 }
 
 void UEncounterDirectorComponent::BeginNextWave()
@@ -198,9 +277,10 @@ void UEncounterDirectorComponent::SpawnDirective(const FEnemySpawn& Directive, T
 		return;
 	}
 
-	UClass* EnemyClass = Directive.Enemy.LoadSynchronous();
+	UClass* EnemyClass = ResolveEnemyClass(Directive);
 	if (!EnemyClass)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: enemy class is not loaded for %s."), *Directive.Enemy.ToString());
 		return;
 	}
 
@@ -329,6 +409,12 @@ bool UEncounterDirectorComponent::TryPreparePendingSpawn(FPendingSpawn& Pending,
 
 void UEncounterDirectorComponent::CancelPendingSpawns()
 {
+	if (EncounterPreloadHandle.IsValid())
+	{
+		EncounterPreloadHandle->CancelHandle();
+		EncounterPreloadHandle.Reset();
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		for (FPendingSpawn& P : PendingSpawns)

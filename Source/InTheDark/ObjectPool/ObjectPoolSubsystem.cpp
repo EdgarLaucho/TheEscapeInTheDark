@@ -107,7 +107,7 @@ AActor* UObjectPoolSubsystem::AcquireFromPool(UObject* WorldContextObject, TSubc
 			Pool.ActiveActors.Remove(Actor);
 			return nullptr;
 		}
-		UE_LOG(LogTemp, Log, TEXT("[Pool] REUSE %s (inactive left: %d)"),
+		UE_LOG(LogTemp, VeryVerbose, TEXT("[Pool] REUSE %s (inactive left: %d)"),
 			*ActorClass->GetName(), Pool.InactiveActors.Num());
 		return Actor;
 	}
@@ -119,7 +119,7 @@ AActor* UObjectPoolSubsystem::AcquireFromPool(UObject* WorldContextObject, TSubc
 		{
 			Pool.ActiveActors.Add(Actor);
 			ActivateActor(Actor, SpawnTransform);
-			UE_LOG(LogTemp, Log, TEXT("[Pool] CREATE NEW %s (total: %d)"),
+			UE_LOG(LogTemp, VeryVerbose, TEXT("[Pool] CREATE NEW %s (total: %d)"),
 				*ActorClass->GetName(), Pool.TotalCreated);
 			return Actor;
 		}
