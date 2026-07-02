@@ -44,11 +44,6 @@ void ACombatArena::BeginPlay()
 		TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &ACombatArena::HandleTriggerOverlap);
 	}
 
-	if (Director)
-	{
-		Director->OnEncounterCleared.AddDynamic(this, &ACombatArena::HandleEncounterCleared);
-	}
-
 	if (!Config)
 	{
 		return;
@@ -140,7 +135,7 @@ void ACombatArena::RequestStart()
 	Director->StartEncounter();
 }
 
-void ACombatArena::HandleEncounterCleared()
+void ACombatArena::NotifyEncounterCleared()
 {
 	if (bUnlockEntryGatesOnClear)
 	{

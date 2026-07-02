@@ -5,6 +5,29 @@
 #include "TimerManager.h"
 #include "UObject/UnrealType.h"
 
+namespace
+{
+	float ReadFloatPropertyByName(const UObject* Object, FName PropertyName)
+	{
+		if (!Object)
+		{
+			return 0.f;
+		}
+
+		if (const FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(Object->GetClass(), PropertyName))
+		{
+			return static_cast<float>(DoubleProperty->GetPropertyValue_InContainer(Object));
+		}
+
+		if (const FFloatProperty* FloatProperty = FindFProperty<FFloatProperty>(Object->GetClass(), PropertyName))
+		{
+			return FloatProperty->GetPropertyValue_InContainer(Object);
+		}
+
+		return 0.f;
+	}
+}
+
 AEncounterGate::AEncounterGate()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -151,30 +174,10 @@ FVector AEncounterGate::GetOpenRelativeLocation() const
 
 float AEncounterGate::GetConfiguredSinkDepthOffset() const
 {
-	if (const FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(GetClass(), TEXT("SinkDepthOffset")))
-	{
-		return static_cast<float>(DoubleProperty->GetPropertyValue_InContainer(this));
-	}
-
-	if (const FFloatProperty* FloatProperty = FindFProperty<FFloatProperty>(GetClass(), TEXT("SinkDepthOffset")))
-	{
-		return FloatProperty->GetPropertyValue_InContainer(this);
-	}
-
-	return 0.f;
+	return ReadFloatPropertyByName(this, TEXT("SinkDepthOffset"));
 }
 
 float AEncounterGate::GetConfiguredSinkTime() const
 {
-	if (const FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(GetClass(), TEXT("SinkTime")))
-	{
-		return static_cast<float>(DoubleProperty->GetPropertyValue_InContainer(this));
-	}
-
-	if (const FFloatProperty* FloatProperty = FindFProperty<FFloatProperty>(GetClass(), TEXT("SinkTime")))
-	{
-		return FloatProperty->GetPropertyValue_InContainer(this);
-	}
-
-	return 0.f;
+	return ReadFloatPropertyByName(this, TEXT("SinkTime"));
 }

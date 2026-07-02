@@ -239,51 +239,62 @@ void ASpawnArea::TrySpawn()
 		return; 
 	}
 
+	RegisterSpawnedEnemy(SpawnEnemy(EnemyClass));
+}
+
+ASpawnAnchor* ASpawnArea::ChooseBoundAnchorForSpawn(TSubclassOf<AActor> EnemyClass) const
+{
+	if (BoundAnchors.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	const AActor* Player = GetPlayerActor();
+	TArray<ASpawnAnchor*> Available;
+	for (const TObjectPtr<ASpawnAnchor>& Anchor : BoundAnchors)
+	{
+		if (!Anchor) { continue; }
+		if (!Anchor->IsAvailableForSpawn(Player)) { continue; }
+		if (Anchor->IsSpawnLocationOccupied(EnemyClass)) { continue; }
+		Available.Add(Anchor);
+	}
+
+	return Available.IsEmpty() ? nullptr : Available[FMath::RandRange(0, Available.Num() - 1)];
+}
+
+AActor* ASpawnArea::SpawnEnemy(TSubclassOf<AActor> EnemyClass)
+{
+	if (ASpawnAnchor* Anchor = ChooseBoundAnchorForSpawn(EnemyClass))
+	{
+		if (AActor* Spawned = Anchor->PerformSpawn(EnemyClass))
+		{
+			return Spawned;
+		}
+	}
+
 	FTransform SpawnTransform;
-	bool bFound = false;
-
-	if (!BoundAnchors.IsEmpty())
+	if (!GetRandomSpawnTransform(SpawnTransform))
 	{
-		const AActor* Player = GetPlayerActor();
-		TArray<ASpawnAnchor*> Available;
-		for (const TObjectPtr<ASpawnAnchor>& Anchor : BoundAnchors)
-		{
-			if (Anchor && Anchor->IsAvailableForSpawn(Player))
-			{
-				Available.Add(Anchor);
-			}
-		}
-		if (!Available.IsEmpty())
-		{
-			ASpawnAnchor* Chosen = Available[FMath::RandRange(0, Available.Num() - 1)];
-			SpawnTransform = Chosen->GetActorTransform();
-			bFound = true;
-		}
+		return nullptr;
 	}
-
-	if (!bFound)
-	{
-		bFound = GetRandomSpawnTransform(SpawnTransform);
-	}
-
-	if (!bFound) { return; }
 
 	SpawnTransform = BuildSpawnAreaGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
 
-	AActor* Spawned = nullptr;
-
 	if (UObjectPoolSubsystem* Pool = GetPool())
 	{
-		Spawned = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform);
+		if (AActor* Spawned = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform))
+		{
+			return Spawned;
+		}
 	}
 
-	if (!Spawned)
-	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		Spawned = GetWorld()->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params);
-	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	return GetWorld() ? GetWorld()->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params) : nullptr;
+}
 
+void ASpawnArea::RegisterSpawnedEnemy(AActor* Spawned)
+{
 	if (IsValid(Spawned))
 	{
 		Spawned->OnDestroyed.AddDynamic(this, &ASpawnArea::OnEnemyDestroyed);
@@ -478,8 +489,6 @@ bool ASpawnArea::GetRandomSpawnTransform(FTransform& OutTransform) const
 
 TSubclassOf<AActor> ASpawnArea::PickEnemyClass() const
 {
-	struct FEligible { TSubclassOf<AActor> Class; float Weight; };
-	TArray<FEligible> Eligible;
 	float TotalWeight = 0.f;
 
 	for (const FSpawnAreaEntry& Entry : EnemyEntries)
@@ -491,27 +500,33 @@ TSubclassOf<AActor> ASpawnArea::PickEnemyClass() const
 
 		if (CountActiveOfClass(Entry.EnemyClass) < Entry.MaxCount)
 		{
-			Eligible.Add({ Entry.EnemyClass, Entry.Weight });
 			TotalWeight += Entry.Weight;
 		}
 	}
 
-	if (Eligible.IsEmpty() || TotalWeight <= 0.f) 
+	if (TotalWeight <= 0.f)
 	{ 
 		return nullptr; 
 	}
 
 	float Rand = FMath::RandRange(0.f, TotalWeight);
-	for (const FEligible& E : Eligible)
+	TSubclassOf<AActor> LastEligible = nullptr;
+	for (const FSpawnAreaEntry& Entry : EnemyEntries)
 	{
-		Rand -= E.Weight;
+		if (!Entry.EnemyClass || CountActiveOfClass(Entry.EnemyClass) >= Entry.MaxCount)
+		{
+			continue;
+		}
+
+		LastEligible = Entry.EnemyClass;
+		Rand -= Entry.Weight;
 		if (Rand <= 0.f) 
 		{
-			return E.Class;
+			return Entry.EnemyClass;
 		}
 	}
 
-	return Eligible.Last().Class;
+	return LastEligible;
 }
 
 int32 ASpawnArea::CountActiveOfClass(TSubclassOf<AActor> Class) const

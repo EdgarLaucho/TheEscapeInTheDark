@@ -5,7 +5,6 @@
 #include "EncounterGate.generated.h"
 
 class UStaticMeshComponent;
-class UNiagaraComponent;
 
 UCLASS(Blueprintable, BlueprintType)
 class INTHEDARK_API AEncounterGate : public AActor

@@ -66,12 +66,17 @@ private:
 	void BeginNextWave();
 	void BeginWaveActuallyNow();
 	void SpawnDirectives(const FEncounterWave& Wave);
+	void SpawnDirective(const FEnemySpawn& Directive, TSet<ASpawnAnchor*>& ReservedAnchors);
+	ASpawnAnchor* ChooseAnchorForSpawn(TSubclassOf<AActor> EnemyClass, TSet<ASpawnAnchor*>& ReservedAnchors) const;
+	void ScheduleSpawn(TSubclassOf<AActor> EnemyClass, ASpawnAnchor* Anchor, float LeadSeconds);
 	void ExecutePendingSpawn(int32 PendingIndex);
+	bool TryPreparePendingSpawn(FPendingSpawn& Pending, int32 PendingIndex);
 	void CancelPendingSpawns();
 	void TrackSpawnedEnemy(AActor* Enemy);
 	void ReleaseAliveEnemiesToPool();
 	int32 GetAliveEnemyCount() const;
 	bool HasActivePendingSpawns() const;
+	bool ShouldAdvanceWave(const FWaveContinuation& Rule, int32 Remaining) const;
 	void EvaluateWaveContinuation();
 	void HandleWaveCleared();
 	void HandleEncounterCleared();
@@ -87,4 +92,5 @@ private:
 	const FEncounterWave* GetCurrentWave() const;
 	TArray<ASpawnAnchor*> GetAvailableAnchors(TSubclassOf<AActor> EnemyClass, const TSet<ASpawnAnchor*>* ReservedAnchors = nullptr) const;
 	AActor* GetPlayerActor() const;
+	UObjectPoolSubsystem* GetPool() const;
 };

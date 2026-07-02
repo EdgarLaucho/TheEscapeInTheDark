@@ -54,15 +54,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Encounter")
 	void RequestStart();
 
+	void NotifyEncounterCleared();
+
 protected:
 	virtual void BeginPlay() override;
 
 	UFUNCTION()
 	void HandleTriggerOverlap(UPrimitiveComponent* OverlappedComp, AActor* Other, UPrimitiveComponent* OtherComp,
 		int32 OtherBodyIndex, bool bFromSweep, const FHitResult& Sweep);
-
-	UFUNCTION()
-	void HandleEncounterCleared();
 
 private:
 	bool bAlreadyStartedThisSession = false;

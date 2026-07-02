@@ -66,6 +66,9 @@ private:
 	void OnEnemyDestroyed(AActor* DestroyedActor);
 
 	void TrySpawn();
+	AActor* SpawnEnemy(TSubclassOf<AActor> EnemyClass);
+	ASpawnAnchor* ChooseBoundAnchorForSpawn(TSubclassOf<AActor> EnemyClass) const;
+	void RegisterSpawnedEnemy(AActor* Spawned);
 	void EnforceLeash();
 	void CheckDespawnOnLeave();
 	void ReleaseEnemy(AActor* Enemy);
