@@ -18,36 +18,6 @@ struct INTHEDARK_API FPoolSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool Settings")
 	bool bAutoExpand = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool Settings")
-	bool bAutoRegister = true;
-};
-
-USTRUCT(BlueprintType)
-struct INTHEDARK_API FPoolStats
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly, Category = "Pool Stats")
-	int32 ActiveCount = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Pool Stats")
-	int32 InactiveCount = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Pool Stats")
-	int32 QueuedRequests = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Pool Stats")
-	int32 TotalCreated = 0;
-};
-
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnPoolRequestFulfilled, AActor*, Actor);
-
-struct FPoolRequest
-{
-	TSubclassOf<AActor> ActorClass;
-	FTransform SpawnTransform;
-	FOnPoolRequestFulfilled OnFulfilled;
 };
 
 USTRUCT()
@@ -64,36 +34,8 @@ struct FObjectPool
 	UPROPERTY()
 	FPoolSettings Settings;
 
-	TArray<FPoolRequest> QueuedRequests;
-
 	UPROPERTY()
 	int32 TotalCreated = 0;
 };
 
-USTRUCT(BlueprintType)
-struct INTHEDARK_API FSpawnClassEntry
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn")
-	TSubclassOf<AActor> ActorClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn", meta = (ClampMin = "0.01"))
-	float Weight = 1.0f;
-};
-
-USTRUCT(BlueprintType)
-struct INTHEDARK_API FPoolCatalogEntry
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool Catalog")
-	TSubclassOf<AActor> ActorClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool Catalog")
-	FPoolSettings Settings;
-};
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPoolExhausted, TSubclassOf<AActor>, ActorClass);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActorAcquired, AActor*, Actor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActorReleased, AActor*, Actor);
