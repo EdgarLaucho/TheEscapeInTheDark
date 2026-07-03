@@ -136,6 +136,7 @@ void UDialogueSubsystem::EndDialogue()
 	}
 
 	SaveAndMarkSeen();
+	OnDialogueEnded.Broadcast(ActiveDialogueID);
 
 	if (Widget)
 	{

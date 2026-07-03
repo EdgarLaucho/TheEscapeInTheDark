@@ -11,6 +11,7 @@ class USaveGame;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveWritten);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveSnapshotRequested);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEncounterCleared, FName, EncounterId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSaveWrittenAsync, bool, bSuccess);
 
@@ -186,6 +187,21 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
 	FSavedCompanionPersonality GetCompanionPersonality() const { return CompanionPersonalityCache; }
 
+	UFUNCTION(BlueprintCallable, Category = "Save|Companion")
+	void UpdateCompanionState(const FTransform& Transform, uint8 CurrentStateValue, bool bHasAwoken);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Companion")
+	void MarkCompanionAwoken(const FTransform& Transform, uint8 CurrentStateValue);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
+	FSavedCompanionState GetCompanionState() const { return CompanionStateCache; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
+	bool HasSavedCompanionState() const { return CompanionStateCache.bHasSavedState; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
+	bool HasCompanionAwoken() const { return CompanionStateCache.bHasAwoken; }
+
 	// ──── Tutorial ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Tutorial")
@@ -277,6 +293,9 @@ public:
 	FOnSaveWritten OnSaveWritten;
 
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
+	FOnSaveSnapshotRequested OnSaveSnapshotRequested;
+
+	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnSaveWrittenAsync OnSaveWrittenAsync;
 
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
@@ -297,11 +316,13 @@ protected:
 	FString GetSlotName(int32 SlotIndex) const;
 	bool IsValidSlotIndex(int32 SlotIndex) const;
 	bool IsMainMenuMap(const FString& MapName) const;
+	void RequestSaveSnapshot();
 
 private:
 	TArray<FSavedInventoryEntry> InventoryCache;
 	TArray<FSavedElementProgressionEntry> ElementProgressionCache;
 	FSavedCompanionPersonality CompanionPersonalityCache;
+	FSavedCompanionState CompanionStateCache;
 	FSavedTutorialState TutorialStateCache;
 	TMap<FName, TSet<FString>> WorldStateCache;
 	TSet<FName> ClearedEncountersCache;
@@ -315,5 +336,6 @@ private:
 	bool bSaveDirty = false;
 	bool bAsyncSaveInFlight = false;
 	bool bAsyncLoadInFlight = false;
+	bool bRequestingSaveSnapshot = false;
 	FDelegateHandle PostLoadMapHandle;
 };

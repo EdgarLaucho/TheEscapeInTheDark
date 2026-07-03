@@ -8,6 +8,8 @@
 class UDialogueWidget;
 class APlayerController;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDialogueEnded, FName, DialogueID);
+
 enum class EDialoguePlaybackMode : uint8
 {
 	Interactive,
@@ -31,6 +33,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Dialogue")
 	bool IsDialogueActive() const { return bActive; }
+
+	UPROPERTY(BlueprintAssignable, Category = "Dialogue")
+	FOnDialogueEnded OnDialogueEnded;
 
 private:
 	void StartDialogueWithMode(UDialogueData* Data, FName DialogueID, APlayerController* PC, EDialoguePlaybackMode PlaybackMode, bool bMarkSeen, float LineHoldSeconds, bool bBlockMovement);
