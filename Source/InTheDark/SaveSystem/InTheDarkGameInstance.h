@@ -38,6 +38,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save|Config")
 	int32 MaxSlots = 3;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
+	FName DefaultGameLevelName = TEXT("Lvl_EscapeRouteFromTheDarkness");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
+	FName MainMenuLevelName = TEXT("Lvl_MainMenuEscape");
+
 	/** Vuelca el estado sucio del slot actual, cambia y carga (o crea) el slot destino. */
 	UFUNCTION(BlueprintCallable, Category = "Save|Slots")
 	void SwitchToSlot(int32 SlotIndex);
@@ -55,6 +61,18 @@ public:
 	/** Elimina el archivo de guardado de un slot. Si es el slot activo, también resetea la caché. */
 	UFUNCTION(BlueprintCallable, Category = "Save|Slots")
 	void DeleteSlot(int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void StartNewGameFromMenu(UObject* WorldContextObject, int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void ContinueGameFromMenu(UObject* WorldContextObject, int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void SaveCurrentGameAndOpenMainMenu(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void OpenMainMenuWithoutSaving(UObject* WorldContextObject);
 
 	// ──── Estado del jugador ──────────────────────────────────────────────
 
@@ -277,6 +295,8 @@ protected:
 	void OnPostLoadMapWithWorld(UWorld* LoadedWorld);
 	void ResetCache();
 	FString GetSlotName(int32 SlotIndex) const;
+	bool IsValidSlotIndex(int32 SlotIndex) const;
+	bool IsMainMenuMap(const FString& MapName) const;
 
 private:
 	TArray<FSavedInventoryEntry> InventoryCache;
