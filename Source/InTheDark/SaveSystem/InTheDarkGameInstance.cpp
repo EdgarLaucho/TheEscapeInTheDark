@@ -14,6 +14,27 @@ UInTheDarkGameInstance* UInTheDarkGameInstance::Get(const UObject* WorldContextO
 	return Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(WorldContextObject));
 }
 
+namespace
+{
+	FString CleanMapNameForSave(FString MapName)
+	{
+		if (MapName.StartsWith(TEXT("UEDPIE_")))
+		{
+			int32 FirstUnder = INDEX_NONE;
+			int32 SecondUnder = INDEX_NONE;
+			if (MapName.FindChar(TEXT('_'), FirstUnder))
+			{
+				const FString AfterPrefix = MapName.Mid(FirstUnder + 1);
+				if (AfterPrefix.FindChar(TEXT('_'), SecondUnder))
+				{
+					MapName = AfterPrefix.Mid(SecondUnder + 1);
+				}
+			}
+		}
+		return MapName;
+	}
+}
+
 void UInTheDarkGameInstance::Init()
 {
 	Super::Init();
@@ -41,6 +62,18 @@ void UInTheDarkGameInstance::Shutdown()
 FString UInTheDarkGameInstance::GetSlotName(int32 SlotIndex) const
 {
 	return FString::Printf(TEXT("Save_%d"), SlotIndex);
+}
+
+bool UInTheDarkGameInstance::IsValidSlotIndex(int32 SlotIndex) const
+{
+	return SlotIndex >= 0 && SlotIndex < MaxSlots;
+}
+
+bool UInTheDarkGameInstance::IsMainMenuMap(const FString& MapName) const
+{
+	if (MainMenuLevelName.IsNone()) return false;
+	const FString MenuName = MainMenuLevelName.ToString();
+	return MapName.Equals(MenuName) || MapName.EndsWith(TEXT("_") + MenuName);
 }
 
 void UInTheDarkGameInstance::ResetCache()
@@ -71,7 +104,7 @@ void UInTheDarkGameInstance::ForceSlotName(const FString& Slot, int32 UserIdx)
 
 void UInTheDarkGameInstance::SwitchToSlot(int32 SlotIndex)
 {
-	if (SlotIndex < 0 || SlotIndex >= MaxSlots)
+	if (!IsValidSlotIndex(SlotIndex))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SwitchToSlot: index %d out of range [0..%d)"), SlotIndex, MaxSlots);
 		return;
@@ -129,7 +162,7 @@ TArray<FSaveSlotInfo> UInTheDarkGameInstance::GetAllSlotInfos() const
 
 void UInTheDarkGameInstance::DeleteSlot(int32 SlotIndex)
 {
-	if (SlotIndex < 0 || SlotIndex >= MaxSlots) return;
+	if (!IsValidSlotIndex(SlotIndex)) return;
 
 	const FString SlotName = GetSlotName(SlotIndex);
 	UGameplayStatics::DeleteGameInSlot(SlotName, SaveUserIndex);
@@ -140,6 +173,55 @@ void UInTheDarkGameInstance::DeleteSlot(int32 SlotIndex)
 		bHasLoadedSave = false;
 		bSaveDirty = false;
 	}
+}
+
+void UInTheDarkGameInstance::StartNewGameFromMenu(UObject* WorldContextObject, int32 SlotIndex)
+{
+	if (!IsValidSlotIndex(SlotIndex) || DefaultGameLevelName.IsNone()) return;
+
+	CurrentSlotIndex = SlotIndex;
+	SaveSlotName = GetSlotName(SlotIndex);
+	ClearProgress();
+	SetLastMapName(DefaultGameLevelName.ToString());
+	WriteSaveToDisk();
+	UGameplayStatics::SetGamePaused(WorldContextObject, false);
+	UGameplayStatics::OpenLevel(WorldContextObject, DefaultGameLevelName);
+}
+
+void UInTheDarkGameInstance::ContinueGameFromMenu(UObject* WorldContextObject, int32 SlotIndex)
+{
+	if (!IsValidSlotIndex(SlotIndex) || DefaultGameLevelName.IsNone()) return;
+
+	SwitchToSlot(SlotIndex);
+	FName TargetLevel = DefaultGameLevelName;
+	if (!CachedLastMapName.IsEmpty() && !IsMainMenuMap(CachedLastMapName))
+	{
+		FString SavedMapName = CachedLastMapName;
+		const FString DefaultMapName = DefaultGameLevelName.ToString();
+		if (!SavedMapName.Equals(DefaultMapName) && DefaultMapName.EndsWith(SavedMapName))
+		{
+			SavedMapName = DefaultMapName;
+		}
+		TargetLevel = FName(*SavedMapName);
+	}
+	UGameplayStatics::SetGamePaused(WorldContextObject, false);
+	UGameplayStatics::OpenLevel(WorldContextObject, TargetLevel);
+}
+
+void UInTheDarkGameInstance::SaveCurrentGameAndOpenMainMenu(UObject* WorldContextObject)
+{
+	if (bSaveDirty)
+	{
+		WriteSaveToDisk();
+	}
+	OpenMainMenuWithoutSaving(WorldContextObject);
+}
+
+void UInTheDarkGameInstance::OpenMainMenuWithoutSaving(UObject* WorldContextObject)
+{
+	if (MainMenuLevelName.IsNone()) return;
+	UGameplayStatics::SetGamePaused(WorldContextObject, false);
+	UGameplayStatics::OpenLevel(WorldContextObject, MainMenuLevelName);
 }
 
 // ── Player State ──────────────────────────────────────────
@@ -430,15 +512,7 @@ void UInTheDarkGameInstance::ClearEncounters()
 
 void UInTheDarkGameInstance::SetLastMapName(const FString& MapName)
 {
-	FString CleanName = MapName;
-	// Strip PIE prefix so save files always store the bare map name
-	if (CleanName.StartsWith(TEXT("UEDPIE_")))
-	{
-		int32 LastUnder = INDEX_NONE;
-		CleanName.FindLastChar(TEXT('_'), LastUnder);
-		if (LastUnder != INDEX_NONE)
-			CleanName = CleanName.Mid(LastUnder + 1);
-	}
+	const FString CleanName = CleanMapNameForSave(MapName);
 	if (CachedLastMapName == CleanName) return;
 	CachedLastMapName = CleanName;
 	bSaveDirty = true;
@@ -680,7 +754,7 @@ bool UInTheDarkGameInstance::DeleteSave()
 void UInTheDarkGameInstance::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 {
 	if (!LoadedWorld) return;
-	if (DoesSaveSlotExist())
+	if (DoesSaveSlotExist() && !IsMainMenuMap(LoadedWorld->GetMapName()))
 	{
 		SetLastMapName(LoadedWorld->GetMapName());
 	}
