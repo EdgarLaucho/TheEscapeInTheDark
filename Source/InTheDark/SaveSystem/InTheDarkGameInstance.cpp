@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "Misc/CoreDelegates.h"
 #include "GameFramework/PlayerStart.h"
+#include "GameFramework/PlayerController.h"
 #include "EngineUtils.h"
 
 UInTheDarkGameInstance::UInTheDarkGameInstance() = default;
@@ -105,8 +106,23 @@ void UInTheDarkGameInstance::RequestSaveSnapshot()
 {
 	if (bRequestingSaveSnapshot) return;
 	bRequestingSaveSnapshot = true;
+	CapturePlayerSnapshot();
 	OnSaveSnapshotRequested.Broadcast();
 	bRequestingSaveSnapshot = false;
+}
+
+void UInTheDarkGameInstance::CapturePlayerSnapshot()
+{
+	UWorld* World = GetWorld();
+	if (!World || IsMainMenuMap(World->GetMapName())) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	if (!Pawn) return;
+
+	PlayerStateCache.Transform = Pawn->GetActorTransform();
+	PlayerStateCache.bHasSavedTransform = true;
+	bSaveDirty = true;
 }
 
 // ── Slots ─────────────────────────────────────────────────
@@ -238,6 +254,7 @@ void UInTheDarkGameInstance::OpenMainMenuWithoutSaving(UObject* WorldContextObje
 void UInTheDarkGameInstance::SavePlayerState(const FSavedPlayerState& State)
 {
 	PlayerStateCache = State;
+	PlayerStateCache.bHasSavedTransform = true;
 	bSaveDirty = true;
 }
 
@@ -245,6 +262,7 @@ void UInTheDarkGameInstance::SaveAtCheckpoint(FName CheckpointID, const FSavedPl
 {
 	PlayerStateCache = State;
 	PlayerStateCache.LastCheckpointID = CheckpointID;
+	PlayerStateCache.bHasSavedTransform = true;
 	bSaveDirty = true;
 	WriteSaveToDiskAsync();
 }
@@ -447,12 +465,10 @@ void UInTheDarkGameInstance::UpdateCompanionPersonality(float Courage, float Anx
 
 void UInTheDarkGameInstance::UpdateCompanionState(const FTransform& Transform, uint8 CurrentStateValue, bool bHasAwoken)
 {
-	const bool bNewHasAwoken = CompanionStateCache.bHasAwoken || bHasAwoken || CurrentStateValue != 0;
-
 	CompanionStateCache.bHasSavedState = true;
-	CompanionStateCache.bHasAwoken = bNewHasAwoken;
+	CompanionStateCache.bHasAwoken = CompanionStateCache.bHasAwoken || bHasAwoken;
 	CompanionStateCache.Transform = Transform;
-	CompanionStateCache.CurrentStateValue = bNewHasAwoken && CurrentStateValue == 0 ? 1 : CurrentStateValue;
+	CompanionStateCache.CurrentStateValue = CurrentStateValue;
 	bSaveDirty = true;
 }
 

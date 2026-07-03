@@ -30,6 +30,9 @@ struct INTHEDARK_API FSavedPlayerState
 	FTransform Transform = FTransform::Identity;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Player")
+	bool bHasSavedTransform = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Player")
 	float Health = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Player")
