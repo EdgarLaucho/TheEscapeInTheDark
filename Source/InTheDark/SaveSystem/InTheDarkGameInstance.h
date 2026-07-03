@@ -92,7 +92,7 @@ public:
 
 	/** True si el jugador tiene una posición guardada (pasó por al menos un checkpoint). */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
-	bool HasSavedTransform() const { return PlayerStateCache.LastCheckpointID != NAME_None; }
+	bool HasSavedTransform() const { return PlayerStateCache.bHasSavedTransform || PlayerStateCache.LastCheckpointID != NAME_None; }
 
 	/**
 	 * Devuelve el transform donde debe aparecer el jugador al cargar la escena:
@@ -317,6 +317,7 @@ protected:
 	bool IsValidSlotIndex(int32 SlotIndex) const;
 	bool IsMainMenuMap(const FString& MapName) const;
 	void RequestSaveSnapshot();
+	void CapturePlayerSnapshot();
 
 private:
 	TArray<FSavedInventoryEntry> InventoryCache;
