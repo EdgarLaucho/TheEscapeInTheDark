@@ -3,30 +3,6 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
-#include "UObject/UnrealType.h"
-
-namespace
-{
-	float ReadFloatPropertyByName(const UObject* Object, FName PropertyName)
-	{
-		if (!Object)
-		{
-			return 0.f;
-		}
-
-		if (const FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(Object->GetClass(), PropertyName))
-		{
-			return static_cast<float>(DoubleProperty->GetPropertyValue_InContainer(Object));
-		}
-
-		if (const FFloatProperty* FloatProperty = FindFProperty<FFloatProperty>(Object->GetClass(), PropertyName))
-		{
-			return FloatProperty->GetPropertyValue_InContainer(Object);
-		}
-
-		return 0.f;
-	}
-}
 
 AEncounterGate::AEncounterGate()
 {
@@ -69,12 +45,6 @@ void AEncounterGate::Unlock()
 	OnGateUnlocked();
 }
 
-void AEncounterGate::FinishUnlock()
-{
-	SnapGateToState(false);
-	SetGateCollisionEnabled(false);
-}
-
 void AEncounterGate::ApplyLockState()
 {
 	SetGateCollisionEnabled(bLocked);
@@ -111,7 +81,7 @@ void AEncounterGate::StartGateMove(bool bClosed)
 	MoveStartRelativeLocation = MeshComponent->GetRelativeLocation();
 	MoveTargetRelativeLocation = bClosed ? ClosedRelativeLocation : GetOpenRelativeLocation();
 	MoveElapsedSeconds = 0.f;
-	MoveDurationSeconds = FMath::Max(0.f, GetConfiguredSinkTime());
+	MoveDurationSeconds = FMath::Max(0.f, SinkTime);
 
 	World->GetTimerManager().ClearTimer(GateMoveTimerHandle);
 	if (MoveDurationSeconds <= KINDA_SMALL_NUMBER || MoveStartRelativeLocation.Equals(MoveTargetRelativeLocation))
@@ -169,15 +139,5 @@ void AEncounterGate::SetGateCollisionEnabled(bool bEnabled)
 
 FVector AEncounterGate::GetOpenRelativeLocation() const
 {
-	return ClosedRelativeLocation + FVector(0.f, 0.f, -GetConfiguredSinkDepthOffset());
-}
-
-float AEncounterGate::GetConfiguredSinkDepthOffset() const
-{
-	return ReadFloatPropertyByName(this, TEXT("SinkDepthOffset"));
-}
-
-float AEncounterGate::GetConfiguredSinkTime() const
-{
-	return ReadFloatPropertyByName(this, TEXT("SinkTime"));
+	return ClosedRelativeLocation + FVector(0.f, 0.f, -SinkDepthOffset);
 }

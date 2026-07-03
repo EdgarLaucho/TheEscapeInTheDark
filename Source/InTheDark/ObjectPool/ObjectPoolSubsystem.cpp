@@ -50,11 +50,11 @@ namespace
 
 		TArray<USceneComponent*> InstanceComponents;
 		Actor->GetComponents<USceneComponent>(InstanceComponents);
+
 		for (USceneComponent* InstanceComponent : InstanceComponents)
 		{
-			const USceneComponent* const* DefaultComponent = InstanceComponent
-				? DefaultsByName.Find(InstanceComponent->GetFName())
-				: nullptr;
+			const USceneComponent* const* DefaultComponent = InstanceComponent ? DefaultsByName.Find(InstanceComponent->GetFName()) : nullptr;
+
 			if (DefaultComponent && *DefaultComponent)
 			{
 				InstanceComponent->SetRelativeScale3D((*DefaultComponent)->GetRelativeScale3D());
@@ -67,8 +67,7 @@ void UObjectPoolSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	WorldCleanupHandle = FWorldDelegates::OnWorldCleanup.AddUObject(
-		this, &UObjectPoolSubsystem::OnWorldCleanup);
+	WorldCleanupHandle = FWorldDelegates::OnWorldCleanup.AddUObject(this, &UObjectPoolSubsystem::OnWorldCleanup);
 }
 
 void UObjectPoolSubsystem::Deinitialize()
@@ -107,8 +106,8 @@ AActor* UObjectPoolSubsystem::AcquireFromPool(UObject* WorldContextObject, TSubc
 			Pool.ActiveActors.Remove(Actor);
 			return nullptr;
 		}
-		UE_LOG(LogTemp, Log, TEXT("[Pool] REUSE %s (inactive left: %d)"),
-			*ActorClass->GetName(), Pool.InactiveActors.Num());
+
+		UE_LOG(LogTemp, Log, TEXT("[Pool] REUSE %s (inactive left: %d)"), *ActorClass->GetName(), Pool.InactiveActors.Num());
 		return Actor;
 	}
 
@@ -119,8 +118,7 @@ AActor* UObjectPoolSubsystem::AcquireFromPool(UObject* WorldContextObject, TSubc
 		{
 			Pool.ActiveActors.Add(Actor);
 			ActivateActor(Actor, SpawnTransform);
-			UE_LOG(LogTemp, Log, TEXT("[Pool] CREATE NEW %s (total: %d)"),
-				*ActorClass->GetName(), Pool.TotalCreated);
+			UE_LOG(LogTemp, Log, TEXT("[Pool] CREATE NEW %s (total: %d)"), *ActorClass->GetName(), Pool.TotalCreated);
 			return Actor;
 		}
 	}
@@ -259,15 +257,18 @@ void UObjectPoolSubsystem::DeactivateActor(AActor* Actor)
 		{
 			AIC->StopMovement();
 		}
+
 		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
 		{
 			Movement->StopMovementImmediately();
 			Movement->SetMovementMode(MOVE_None);
 		}
+
 		if (UCapsuleComponent* Capsule = Character->GetCapsuleComponent())
 		{
 			Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
+
 		if (USkeletalMeshComponent* Mesh = Character->GetMesh())
 		{
 			Mesh->SetAllBodiesSimulatePhysics(false);
@@ -310,21 +311,22 @@ void UObjectPoolSubsystem::ActivateActor(AActor* Actor, const FTransform& Transf
 			{
 				if (USkeletalMeshComponent* CDOMesh = CDO->GetMesh())
 				{
-					Mesh->SetRelativeLocationAndRotation(
-						CDOMesh->GetRelativeLocation(),
-						CDOMesh->GetRelativeRotation());
+					Mesh->SetRelativeLocationAndRotation(CDOMesh->GetRelativeLocation(), CDOMesh->GetRelativeRotation());
 					Mesh->SetRelativeScale3D(CDOMesh->GetRelativeScale3D());
 				}
 			}
 		}
+
 		if (UCapsuleComponent* Capsule = Character->GetCapsuleComponent())
 		{
 			Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		}
+
 		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
 		{
 			Movement->SetMovementMode(MOVE_Walking);
 		}
+
 		if (!Character->GetController())
 		{
 			Character->SpawnDefaultController();
@@ -339,8 +341,15 @@ void UObjectPoolSubsystem::ActivateActor(AActor* Actor, const FTransform& Transf
 
 void UObjectPoolSubsystem::CleanupPool(FObjectPool& Pool)
 {
-	Pool.InactiveActors.RemoveAll([](const TObjectPtr<AActor>& Actor) { return !IsValid(Actor); });
-	Pool.ActiveActors.RemoveAll([](const TObjectPtr<AActor>& Actor) { return !IsValid(Actor); });
+	Pool.InactiveActors.RemoveAll([](const TObjectPtr<AActor>& Actor) 
+	{ 
+		return !IsValid(Actor); 
+	});
+
+	Pool.ActiveActors.RemoveAll([](const TObjectPtr<AActor>& Actor) 
+	{ 
+		return !IsValid(Actor); 
+	});
 }
 
 FObjectPool& UObjectPoolSubsystem::EnsurePool(TSubclassOf<AActor> ActorClass)

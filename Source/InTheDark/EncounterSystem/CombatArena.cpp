@@ -3,7 +3,6 @@
 #include "EncounterSystem/EncounterDirectorComponent.h"
 #include "EncounterSystem/EncounterGate.h"
 #include "EncounterSystem/SpawnAnchor.h"
-#include "ObjectPool/ObjectPoolSubsystem.h"
 #include "SaveSystem/InTheDarkGameInstance.h"
 
 #include "Components/BoxComponent.h"
@@ -42,45 +41,6 @@ void ACombatArena::BeginPlay()
 	if (TriggerVolume && bAutoStartOnOverlap)
 	{
 		TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &ACombatArena::HandleTriggerOverlap);
-	}
-
-	if (!Config)
-	{
-		return;
-	}
-
-	UGameInstance* GI = UGameplayStatics::GetGameInstance(this);
-	UObjectPoolSubsystem* Pool = GI ? GI->GetSubsystem<UObjectPoolSubsystem>() : nullptr;
-	if (!Pool)
-	{
-		return;
-	}
-
-	TMap<UClass*, int32> MaxPerClass;
-	for (const FEncounterWave& Wave : Config->Waves)
-	{
-		for (const FEnemySpawn& Spawn : Wave.Spawns)
-		{
-			if (UClass* EnemyClass = Spawn.Enemy.LoadSynchronous())
-			{
-				int32& Best = MaxPerClass.FindOrAdd(EnemyClass);
-				Best = FMath::Max(Best, Spawn.Count);
-			}
-		}
-	}
-
-	for (const TPair<UClass*, int32>& Pair : MaxPerClass)
-	{
-		if (!Pool->HasPool(Pair.Key))
-		{
-			FPoolSettings Settings;
-			Settings.PrewarmCount = Pair.Value;
-			Settings.MaxPoolSize = Pair.Value * 3;
-			Settings.bAutoExpand = true;
-			Pool->RegisterPool(Pair.Key, Settings);
-		}
-
-		Pool->PrewarmPool(this, Pair.Key, Pair.Value);
 	}
 }
 

@@ -29,9 +29,6 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Gate")
 	void OnGateUnlocked();
 
-	UFUNCTION(BlueprintCallable, Category = "Gate")
-	void FinishUnlock();
-
 protected:
 	virtual void BeginPlay() override;
 
@@ -40,6 +37,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate")
 	bool bStartLocked = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate", meta = (ClampMin = "0.0"))
+	float SinkDepthOffset = 450.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate", meta = (ClampMin = "0.0"))
+	float SinkTime = 0.8f;
 
 private:
 	UPROPERTY(Transient)
@@ -60,6 +63,4 @@ private:
 	void UpdateGateMove();
 	void SetGateCollisionEnabled(bool bEnabled);
 	FVector GetOpenRelativeLocation() const;
-	float GetConfiguredSinkDepthOffset() const;
-	float GetConfiguredSinkTime() const;
 };

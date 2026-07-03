@@ -7,60 +7,8 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
-
-namespace
-{
-	float GetSpawnAreaFloorOffset(TSubclassOf<AActor> EnemyClass)
-	{
-		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
-		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
-		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
-	}
-
-	FVector GetSpawnAreaDefaultScale(TSubclassOf<AActor> EnemyClass)
-	{
-		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
-		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
-	}
-
-	FTransform BuildSpawnAreaGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
-	{
-		FTransform Result = SourceTransform;
-		Result.SetScale3D(GetSpawnAreaDefaultScale(EnemyClass));
-		if (!World || !EnemyClass)
-		{
-			return Result;
-		}
-
-		const float FloorOffset = GetSpawnAreaFloorOffset(EnemyClass);
-		if (FloorOffset <= 0.f)
-		{
-			return Result;
-		}
-
-		FVector Location = Result.GetLocation();
-		const FVector TraceStart = Location + FVector(0.f, 0.f, FMath::Max(500.f, FloorOffset + 200.f));
-		const FVector TraceEnd = Location - FVector(0.f, 0.f, 5000.f);
-
-		FHitResult Hit;
-		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SpawnAreaGroundTrace), false);
-		if (IgnoredActor)
-		{
-			QueryParams.AddIgnoredActor(IgnoredActor);
-		}
-
-		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
-		{
-			Location.Z = Hit.ImpactPoint.Z + FloorOffset + 2.f;
-			Result.SetLocation(Location);
-		}
-
-		return Result;
-	}
-}
 
 ASpawnArea::ASpawnArea()
 {
@@ -114,7 +62,6 @@ void ASpawnArea::OnConstruction(const FTransform& Transform)
 
 void ASpawnArea::Activate()
 {
-	SpawnQuota = 0;
 	GetWorld()->GetTimerManager().ClearTimer(DespawnCheckHandle);
 
 	ApplyLeashStateToActiveEnemies();
@@ -195,10 +142,7 @@ void ASpawnArea::OnOverlapBegin(UPrimitiveComponent*, AActor* Other, UPrimitiveC
 void ASpawnArea::OnOverlapEnd(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32)
 {
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC || Other != PC->GetPawn())
-	{ 
-		return; 
-	}
+	if (!PC || Other != PC->GetPawn()) { return; }
 
 	RefreshPlayerInsideState();
 }
@@ -222,63 +166,23 @@ void ASpawnArea::TrySpawn()
 {
 	CleanDeadEntries();
 
-	if (ActiveEnemies.Num() >= Rules.MaxSimultaneous) 
-	{ 
-		return; 
-	}
-
-	if (!Rules.bRespawnOnDeath && SpawnQuota >= Rules.MaxSimultaneous)
-	{
-		GetWorld()->GetTimerManager().ClearTimer(SpawnTimerHandle);
-		return;
-	}
+	if (ActiveEnemies.Num() >= Rules.MaxSimultaneous) { return; }
 
 	TSubclassOf<AActor> EnemyClass = PickEnemyClass();
-	if (!EnemyClass) 
-	{ 
-		return; 
-	}
+	if (!EnemyClass) { return; }
 
 	RegisterSpawnedEnemy(SpawnEnemy(EnemyClass));
 }
 
-ASpawnAnchor* ASpawnArea::ChooseBoundAnchorForSpawn(TSubclassOf<AActor> EnemyClass) const
-{
-	if (BoundAnchors.IsEmpty())
-	{
-		return nullptr;
-	}
-
-	const AActor* Player = GetPlayerActor();
-	TArray<ASpawnAnchor*> Available;
-	for (const TObjectPtr<ASpawnAnchor>& Anchor : BoundAnchors)
-	{
-		if (!Anchor) { continue; }
-		if (!Anchor->IsAvailableForSpawn(Player)) { continue; }
-		if (Anchor->IsSpawnLocationOccupied(EnemyClass)) { continue; }
-		Available.Add(Anchor);
-	}
-
-	return Available.IsEmpty() ? nullptr : Available[FMath::RandRange(0, Available.Num() - 1)];
-}
-
 AActor* ASpawnArea::SpawnEnemy(TSubclassOf<AActor> EnemyClass)
 {
-	if (ASpawnAnchor* Anchor = ChooseBoundAnchorForSpawn(EnemyClass))
-	{
-		if (AActor* Spawned = Anchor->PerformSpawn(EnemyClass))
-		{
-			return Spawned;
-		}
-	}
-
 	FTransform SpawnTransform;
 	if (!GetRandomSpawnTransform(SpawnTransform))
 	{
 		return nullptr;
 	}
 
-	SpawnTransform = BuildSpawnAreaGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
+	SpawnTransform = ASpawnAnchor::BuildGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
 
 	if (UObjectPoolSubsystem* Pool = GetPool())
 	{
@@ -300,7 +204,6 @@ void ASpawnArea::RegisterSpawnedEnemy(AActor* Spawned)
 		Spawned->OnDestroyed.AddDynamic(this, &ASpawnArea::OnEnemyDestroyed);
 		ActiveEnemies.Add(Spawned);
 		ApplyLeashState(Spawned);
-		++SpawnQuota;
 	}
 }
 
@@ -312,21 +215,15 @@ void ASpawnArea::EnforceLeash()
 	if (ActiveEnemies.IsEmpty())
 	{
 		if (!bPlayerInside)
+		{
 			GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
-
+		}
 		return;
 	}
 
 	for (const TWeakObjectPtr<AActor>& WeakEnemy : ActiveEnemies)
 	{
-		AActor* Enemy = WeakEnemy.Get();
-
-		if (!Enemy) 
-		{ 
-			continue; 
-		}
-
-		ApplyLeashState(Enemy);
+		ApplyLeashState(WeakEnemy.Get());
 	}
 }
 
@@ -353,10 +250,7 @@ void ASpawnArea::CheckDespawnOnLeave()
 	for (const TWeakObjectPtr<AActor>& WeakEnemy : ActiveEnemies)
 	{
 		AActor* Enemy = WeakEnemy.Get();
-		if (!Enemy) 
-		{ 
-			continue; 
-		}
+		if (!Enemy) { continue; }
 
 		if (!Rules.bRequireOutOfSightToDespawn || !IsVisibleToPlayer(Enemy))
 		{
@@ -380,15 +274,12 @@ void ASpawnArea::CheckDespawnOnLeave()
 
 void ASpawnArea::ReleaseEnemy(AActor* Enemy)
 {
-	if (!Enemy)
-	{ 
-		return; 
-	}
+	if (!Enemy) { return; }
 
 	Enemy->OnDestroyed.RemoveDynamic(this, &ASpawnArea::OnEnemyDestroyed);
-	ActiveEnemies.RemoveAll([Enemy](const TWeakObjectPtr<AActor>& W) 
-	{ 
-		return W.Get() == Enemy; 
+	ActiveEnemies.RemoveAll([Enemy](const TWeakObjectPtr<AActor>& W)
+	{
+		return W.Get() == Enemy;
 	});
 
 	if (UObjectPoolSubsystem* Pool = GetPool())
@@ -403,16 +294,10 @@ void ASpawnArea::ReleaseEnemy(AActor* Enemy)
 
 void ASpawnArea::ApplyLeashState(AActor* Enemy) const
 {
-	if (!Enemy) 
-	{ 
-		return; 
-	}
+	if (!Enemy) { return; }
 
 	ULeashComponent* Leash = Enemy->FindComponentByClass<ULeashComponent>();
-	if (!Leash) 
-	{ 
-		return; 
-	}
+	if (!Leash) { return; }
 
 	if (bPlayerInside)
 	{
@@ -441,10 +326,7 @@ void ASpawnArea::ApplyLeashStateToActiveEnemies() const
 bool ASpawnArea::IsVisibleToPlayer(const AActor* Enemy) const
 {
 	const AActor* Player = GetPlayerActor();
-	if (!Player || !Enemy) 
-	{ 
-		return false;
-	}
+	if (!Player || !Enemy) { return false; }
 
 	const FVector ToEnemy = (Enemy->GetActorLocation() - Player->GetActorLocation()).GetSafeNormal();
 	const float CosHalfAngle = FMath::Cos(FMath::DegreesToRadians(Rules.VisibilityConeHalfAngle));
@@ -493,10 +375,7 @@ TSubclassOf<AActor> ASpawnArea::PickEnemyClass() const
 
 	for (const FSpawnAreaEntry& Entry : EnemyEntries)
 	{
-		if (!Entry.EnemyClass) 
-		{
-			 continue; 
-		}
+		if (!Entry.EnemyClass) { continue; }
 
 		if (CountActiveOfClass(Entry.EnemyClass) < Entry.MaxCount)
 		{
@@ -504,10 +383,7 @@ TSubclassOf<AActor> ASpawnArea::PickEnemyClass() const
 		}
 	}
 
-	if (TotalWeight <= 0.f)
-	{ 
-		return nullptr; 
-	}
+	if (TotalWeight <= 0.f) { return nullptr; }
 
 	float Rand = FMath::RandRange(0.f, TotalWeight);
 	TSubclassOf<AActor> LastEligible = nullptr;
@@ -520,7 +396,7 @@ TSubclassOf<AActor> ASpawnArea::PickEnemyClass() const
 
 		LastEligible = Entry.EnemyClass;
 		Rand -= Entry.Weight;
-		if (Rand <= 0.f) 
+		if (Rand <= 0.f)
 		{
 			return Entry.EnemyClass;
 		}
@@ -535,10 +411,7 @@ int32 ASpawnArea::CountActiveOfClass(TSubclassOf<AActor> Class) const
 	for (const TWeakObjectPtr<AActor>& W : ActiveEnemies)
 	{
 		const AActor* A = W.Get();
-		if (A && A->GetClass()->IsChildOf(Class))
-		{ 
-			++Count; 
-		}
+		if (A && A->GetClass()->IsChildOf(Class)) { ++Count; }
 	}
 
 	return Count;
@@ -547,18 +420,15 @@ int32 ASpawnArea::CountActiveOfClass(TSubclassOf<AActor> Class) const
 void ASpawnArea::CleanDeadEntries()
 {
 	ActiveEnemies.RemoveAll([](const TWeakObjectPtr<AActor>& W)
-	{ 
-		return !W.IsValid(); 
+	{
+		return !W.IsValid();
 	});
 }
 
 AActor* ASpawnArea::GetPlayerActor() const
 {
 	const UWorld* World = GetWorld();
-	if (!World) 
-	{ 
-		return nullptr; 
-	}
+	if (!World) { return nullptr; }
 
 	const APlayerController* PC = World->GetFirstPlayerController();
 	return PC ? PC->GetPawn() : nullptr;
