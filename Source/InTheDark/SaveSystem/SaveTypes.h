@@ -90,6 +90,24 @@ struct INTHEDARK_API FSavedCompanionPersonality
 };
 
 USTRUCT(BlueprintType)
+struct INTHEDARK_API FSavedCompanionState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	bool bHasSavedState = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	bool bHasAwoken = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	FTransform Transform = FTransform::Identity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Companion")
+	uint8 CurrentStateValue = 0;
+};
+
+USTRUCT(BlueprintType)
 struct INTHEDARK_API FSavedTutorialState
 {
 	GENERATED_BODY()

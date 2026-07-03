@@ -81,6 +81,7 @@ void UInTheDarkGameInstance::ResetCache()
 	InventoryCache.Reset();
 	ElementProgressionCache.Reset();
 	CompanionPersonalityCache = FSavedCompanionPersonality();
+	CompanionStateCache = FSavedCompanionState();
 	TutorialStateCache = FSavedTutorialState();
 	WorldStateCache.Reset();
 	ClearedEncountersCache.Reset();
@@ -98,6 +99,14 @@ void UInTheDarkGameInstance::ForceSlotName(const FString& Slot, int32 UserIdx)
 {
 	SaveSlotName = Slot;
 	SaveUserIndex = UserIdx;
+}
+
+void UInTheDarkGameInstance::RequestSaveSnapshot()
+{
+	if (bRequestingSaveSnapshot) return;
+	bRequestingSaveSnapshot = true;
+	OnSaveSnapshotRequested.Broadcast();
+	bRequestingSaveSnapshot = false;
 }
 
 // ── Slots ─────────────────────────────────────────────────
@@ -436,6 +445,22 @@ void UInTheDarkGameInstance::UpdateCompanionPersonality(float Courage, float Anx
 	bSaveDirty = true;
 }
 
+void UInTheDarkGameInstance::UpdateCompanionState(const FTransform& Transform, uint8 CurrentStateValue, bool bHasAwoken)
+{
+	const bool bNewHasAwoken = CompanionStateCache.bHasAwoken || bHasAwoken || CurrentStateValue != 0;
+
+	CompanionStateCache.bHasSavedState = true;
+	CompanionStateCache.bHasAwoken = bNewHasAwoken;
+	CompanionStateCache.Transform = Transform;
+	CompanionStateCache.CurrentStateValue = bNewHasAwoken && CurrentStateValue == 0 ? 1 : CurrentStateValue;
+	bSaveDirty = true;
+}
+
+void UInTheDarkGameInstance::MarkCompanionAwoken(const FTransform& Transform, uint8 CurrentStateValue)
+{
+	UpdateCompanionState(Transform, CurrentStateValue, true);
+}
+
 // ── Tutorial ───────────────────────────────────────────────
 
 void UInTheDarkGameInstance::UpdateTutorialState(int32 SavedStep, bool bFinished)
@@ -536,6 +561,7 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 	Payload.Inventory = InventoryCache;
 	Payload.ElementProgression = ElementProgressionCache;
 	Payload.CompanionPersonality = CompanionPersonalityCache;
+	Payload.CompanionState = CompanionStateCache;
 	Payload.TutorialState = TutorialStateCache;
 	Payload.LastMapName = CachedLastMapName;
 
@@ -561,6 +587,7 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 	InventoryCache = Payload.Inventory;
 	ElementProgressionCache = Payload.ElementProgression;
 	CompanionPersonalityCache = Payload.CompanionPersonality;
+	CompanionStateCache = Payload.CompanionState;
 	TutorialStateCache = Payload.TutorialState;
 	CachedLastMapName = Payload.LastMapName;
 
@@ -620,6 +647,8 @@ bool UInTheDarkGameInstance::DoesSaveSlotExist() const
 
 bool UInTheDarkGameInstance::WriteSaveToDisk()
 {
+	RequestSaveSnapshot();
+
 	UInTheDarkSaveGame* Payload = BuildPayload();
 	if (!Payload)
 	{
@@ -644,6 +673,8 @@ bool UInTheDarkGameInstance::WriteSaveToDisk()
 void UInTheDarkGameInstance::WriteSaveToDiskAsync()
 {
 	if (bAsyncSaveInFlight) return;
+
+	RequestSaveSnapshot();
 
 	UInTheDarkSaveGame* Payload = BuildPayload();
 	if (!Payload)

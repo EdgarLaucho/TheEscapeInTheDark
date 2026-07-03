@@ -53,6 +53,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Companion")
 	FSavedCompanionPersonality CompanionPersonality;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Companion")
+	FSavedCompanionState CompanionState;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Tutorial")
 	FSavedTutorialState TutorialState;
 
