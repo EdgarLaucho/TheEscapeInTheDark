@@ -89,6 +89,18 @@ struct INTHEDARK_API FSavedCompanionPersonality
 	float StealthAffinity = 30.f;
 };
 
+USTRUCT(BlueprintType)
+struct INTHEDARK_API FSavedTutorialState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Tutorial")
+	int32 SavedStep = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Tutorial")
+	bool bFinished = false;
+};
+
 /** Metadatos ligeros del slot mostrados en el menú de selección de guardado. */
 USTRUCT(BlueprintType)
 struct INTHEDARK_API FSaveSlotInfo

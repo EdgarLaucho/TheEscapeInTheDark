@@ -168,6 +168,20 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
 	FSavedCompanionPersonality GetCompanionPersonality() const { return CompanionPersonalityCache; }
 
+	// ──── Tutorial ──────────────────────────────────────────────
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Tutorial")
+	void UpdateTutorialState(int32 SavedStep, bool bFinished);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
+	FSavedTutorialState GetTutorialState() const { return TutorialStateCache; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
+	int32 GetSavedTutorialStep() const { return TutorialStateCache.SavedStep; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
+	bool IsTutorialFinished() const { return TutorialStateCache.bFinished; }
+
 	// ──── Diálogos ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Dialogue")
@@ -268,6 +282,7 @@ private:
 	TArray<FSavedInventoryEntry> InventoryCache;
 	TArray<FSavedElementProgressionEntry> ElementProgressionCache;
 	FSavedCompanionPersonality CompanionPersonalityCache;
+	FSavedTutorialState TutorialStateCache;
 	TMap<FName, TSet<FString>> WorldStateCache;
 	TSet<FName> ClearedEncountersCache;
 	TSet<FName> SeenDialoguesCache;

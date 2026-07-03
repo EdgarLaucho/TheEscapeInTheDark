@@ -1,4 +1,5 @@
 #include "PlayerTutorialManager.h"
+#include "SaveSystem/InTheDarkGameInstance.h"
 
 APlayerTutorialManager::APlayerTutorialManager()
 {
@@ -7,14 +8,22 @@ APlayerTutorialManager::APlayerTutorialManager()
 
 void APlayerTutorialManager::BeginPlay()
 {
-	Super::BeginPlay();
-
 	CurrentStep = 0;
 	SavedTutorialStep = CurrentStep;
 	bTutorialFinished = false;
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
+
+	if (UInTheDarkGameInstance* GI = UInTheDarkGameInstance::Get(this))
+	{
+		const FSavedTutorialState TutorialState = GI->GetTutorialState();
+		bTutorialFinished = TutorialState.bFinished;
+		CurrentStep = FMath::Clamp(TutorialState.SavedStep, 0, TutorialSteps.Num());
+		SavedTutorialStep = CurrentStep;
+	}
+
+	Super::BeginPlay();
 }
 
 void APlayerTutorialManager::Tick(float DeltaTime)
@@ -51,6 +60,12 @@ void APlayerTutorialManager::NextStep()
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
+
+	if (UInTheDarkGameInstance* GI = UInTheDarkGameInstance::Get(this))
+	{
+		GI->UpdateTutorialState(SavedTutorialStep, false);
+		GI->WriteSaveToDisk();
+	}
 
 	if (!IsValidCurrentStep())
 	{
@@ -221,6 +236,12 @@ void APlayerTutorialManager::FinishTutorial()
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
+
+	if (UInTheDarkGameInstance* GI = UInTheDarkGameInstance::Get(this))
+	{
+		GI->UpdateTutorialState(SavedTutorialStep, true);
+		GI->WriteSaveToDiskAsync();
+	}
 
 	OnTutorialFinished.Broadcast();
 }

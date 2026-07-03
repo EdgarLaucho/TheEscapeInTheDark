@@ -48,6 +48,7 @@ void UInTheDarkGameInstance::ResetCache()
 	InventoryCache.Reset();
 	ElementProgressionCache.Reset();
 	CompanionPersonalityCache = FSavedCompanionPersonality();
+	TutorialStateCache = FSavedTutorialState();
 	WorldStateCache.Reset();
 	ClearedEncountersCache.Reset();
 	SeenDialoguesCache.Reset();
@@ -353,6 +354,20 @@ void UInTheDarkGameInstance::UpdateCompanionPersonality(float Courage, float Anx
 	bSaveDirty = true;
 }
 
+// ── Tutorial ───────────────────────────────────────────────
+
+void UInTheDarkGameInstance::UpdateTutorialState(int32 SavedStep, bool bFinished)
+{
+	const int32 CleanStep = FMath::Max(0, SavedStep);
+
+	if (TutorialStateCache.SavedStep == CleanStep && TutorialStateCache.bFinished == bFinished)
+		return;
+
+	TutorialStateCache.SavedStep = CleanStep;
+	TutorialStateCache.bFinished = bFinished;
+	bSaveDirty = true;
+}
+
 // ── Encounters ────────────────────────────────────────────
 
 // ── Diálogos ──────────────────────────────────────────────
@@ -447,6 +462,7 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 	Payload.Inventory = InventoryCache;
 	Payload.ElementProgression = ElementProgressionCache;
 	Payload.CompanionPersonality = CompanionPersonalityCache;
+	Payload.TutorialState = TutorialStateCache;
 	Payload.LastMapName = CachedLastMapName;
 
 	// Estado del mundo: TMap<FName, TSet<FString>> -> TMap<FName, FWorldActorIDList>
@@ -471,6 +487,7 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 	InventoryCache = Payload.Inventory;
 	ElementProgressionCache = Payload.ElementProgression;
 	CompanionPersonalityCache = Payload.CompanionPersonality;
+	TutorialStateCache = Payload.TutorialState;
 	CachedLastMapName = Payload.LastMapName;
 
 	// Estado del mundo: TMap<FName, FWorldActorIDList> -> TMap<FName, TSet<FString>>
