@@ -9,6 +9,7 @@ class UEncounterConfig;
 class ASpawnAnchor;
 class ACombatArena;
 class UObjectPoolSubsystem;
+struct FStreamableHandle;
 
 UENUM()
 enum class EEncounterState : uint8
@@ -42,7 +43,12 @@ private:
 	FTimerHandle SpawnTimerHandle;
 	FTimerHandle DelayTimerHandle;
 	FTimerHandle PostClearTimerHandle;
+	TSharedPtr<FStreamableHandle> EncounterPreloadHandle;
+	TMap<FSoftObjectPath, TWeakObjectPtr<UClass>> PreloadedEnemyClasses;
 
+	void PreloadEncounterClasses();
+	void HandleEncounterClassesLoaded();
+	TSubclassOf<AActor> ResolveEnemyClass(const FEnemySpawn& Directive) const;
 	void BeginNextWave();
 	void StartWave();
 	void SpawnNextInQueue();
