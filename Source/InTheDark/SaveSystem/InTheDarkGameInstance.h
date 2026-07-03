@@ -7,7 +7,6 @@
 
 class UInTheDarkSaveGame;
 class UWorld;
-class USaveGame;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveWritten);
@@ -15,10 +14,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveSnapshotRequested);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEncounterCleared, FName, EncounterId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSaveWrittenAsync, bool, bSuccess);
 
-/**
- * Gestor del sistema de guardado. Posee la caché en memoria, gestiona los slots y el IO de disco.
- * Todo el estado persistente del juego pasa por aquí.
- */
 UCLASS(BlueprintType, Blueprintable)
 class INTHEDARK_API UInTheDarkGameInstance : public UGameInstance
 {
@@ -30,11 +25,8 @@ public:
 	virtual void Init() override;
 	virtual void Shutdown() override;
 
-	/** Acceso directo — evita el Cast manual en BP y C++. */
 	UFUNCTION(BlueprintPure, Category = "Save", meta = (WorldContext = "WorldContextObject", DisplayName = "Get InTheDark GameInstance"))
 	static UInTheDarkGameInstance* Get(const UObject* WorldContextObject);
-
-	// ──── Slots ─────────────────────────────────────────────────
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save|Config")
 	int32 MaxSlots = 3;
@@ -45,11 +37,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
 	FName MainMenuLevelName = TEXT("Lvl_MainMenuEscape");
 
-	/** Vuelca el estado sucio del slot actual, cambia y carga (o crea) el slot destino. */
 	UFUNCTION(BlueprintCallable, Category = "Save|Slots")
 	void SwitchToSlot(int32 SlotIndex);
 
-	/** Lee los metadatos de un slot sin afectar la caché activa. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Slots")
 	FSaveSlotInfo GetSlotInfo(int32 SlotIndex) const;
 
@@ -59,7 +49,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Slots")
 	int32 GetCurrentSlotIndex() const { return CurrentSlotIndex; }
 
-	/** Elimina el archivo de guardado de un slot. Si es el slot activo, también resetea la caché. */
 	UFUNCTION(BlueprintCallable, Category = "Save|Slots")
 	void DeleteSlot(int32 SlotIndex);
 
@@ -75,57 +64,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
 	void OpenMainMenuWithoutSaving(UObject* WorldContextObject);
 
-	// ──── Estado del jugador ──────────────────────────────────────────────
-
 	UFUNCTION(BlueprintCallable, Category = "Save|Player")
 	void SavePlayerState(const FSavedPlayerState& State);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
 	const FSavedPlayerState& GetPlayerState() const { return PlayerStateCache; }
 
-	/** Guarda el estado del jugador con el ID de checkpoint dado y escribe en disco de forma asíncrona. */
 	UFUNCTION(BlueprintCallable, Category = "Save|Player")
 	void SaveAtCheckpoint(FName CheckpointID, const FSavedPlayerState& State);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
 	FName GetLastCheckpointID() const { return PlayerStateCache.LastCheckpointID; }
 
-	/** True si el jugador tiene una posición guardada (pasó por al menos un checkpoint). */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
 	bool HasSavedTransform() const { return PlayerStateCache.bHasSavedTransform || PlayerStateCache.LastCheckpointID != NAME_None; }
 
-	/**
-	 * Devuelve el transform donde debe aparecer el jugador al cargar la escena:
-	 * - Si hay checkpoint guardado → usa el transform guardado.
-	 * - Si es partida nueva      → busca el primer PlayerStart del mundo y usa su transform.
-	 */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player", meta = (WorldContext = "WorldContextObject"))
 	FTransform GetSpawnTransform(UObject* WorldContextObject) const;
-
-	// ──── Inventario ──────────────────────────────────────────────
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Inventory")
-	const TArray<FSavedInventoryEntry>& GetCachedInventory() const { return InventoryCache; }
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void SetCachedInventory(const TArray<FSavedInventoryEntry>& Inventory);
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void AddInventoryEntry(FName ItemRowName, int32 Quantity);
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void RemoveInventoryEntry(FName ItemRowName, int32 Quantity);
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void SetInventoryEntryQuantity(FName ItemRowName, int32 Quantity);
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Inventory")
-	int32 GetInventoryEntryQuantity(FName ItemRowName) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void ClearInventory();
-
-	// ──── World State (generic) ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|World")
 	void MarkWorldActor(FName Category, const FString& ActorID);
@@ -145,8 +100,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World")
 	static bool IsValidActorID(const FString& ActorID);
 
-	// Atajos — una línea, sin nuevas estructuras de datos.
-
 	UFUNCTION(BlueprintCallable, Category = "Save|World|Chest")
 	void RegisterOpenedChest(const FString& ChestID) { MarkWorldActor(FName("Chest"), ChestID); }
 
@@ -165,8 +118,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World|Door")
 	bool IsDoorOpened(const FString& DoorID) const { return IsWorldActorMarked(FName("Door"), DoorID); }
 
-	// ──── Progresión de Elementos ────────────────────────────────────────────
-
 	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
 	void UpdateElementProgression(const FSavedElementProgressionEntry& Entry);
 
@@ -178,8 +129,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
 	void ClearElementProgression();
-
-	// ──── Personalidad del Compañero ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Companion")
 	void UpdateCompanionPersonality(float Courage, float Anxiety, float Confidence, float AggressionAffinity, float StealthAffinity);
@@ -202,8 +151,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
 	bool HasCompanionAwoken() const { return CompanionStateCache.bHasAwoken; }
 
-	// ──── Tutorial ──────────────────────────────────────────────
-
 	UFUNCTION(BlueprintCallable, Category = "Save|Tutorial")
 	void UpdateTutorialState(int32 SavedStep, bool bFinished);
 
@@ -216,15 +163,11 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
 	bool IsTutorialFinished() const { return TutorialStateCache.bFinished; }
 
-	// ──── Diálogos ──────────────────────────────────────────────
-
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Dialogue")
 	bool IsDialogueSeen(FName DialogueID) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Dialogue")
 	void MarkDialogueSeen(FName DialogueID);
-
-	// ──── Encounters ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Encounters")
 	void MarkEncounterCleared(FName EncounterId);
@@ -241,21 +184,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Save|Encounters")
 	void ClearEncounters();
 
-	// ──── Meta ──────────────────────────────────────────────
-
 	UFUNCTION(BlueprintCallable, Category = "Save|Meta")
 	void SetLastMapName(const FString& MapName);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Meta")
 	FString GetLastMapName() const { return CachedLastMapName; }
 
-	// ──── Progress ──────────────────────────────────────────────
-
-	/** Borra todo el estado en memoria. NO escribe en disco — llama a WriteSaveToDisk después si es necesario. */
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	void ClearProgress();
-
-	// ──── Disk IO ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Disk")
 	bool WriteSaveToDisk();
@@ -265,9 +201,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Disk")
 	bool LoadOrCreateSave();
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Disk")
-	void LoadOrCreateSaveAsync();
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Disk")
 	bool HasLoadedSave() const { return bHasLoadedSave; }
@@ -284,8 +217,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
 	bool bAutosaveOnMapChange = false;
 
-	// ──── Events ──────────────────────────────────────────────
-
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnSaveLoaded OnSaveLoaded;
 
@@ -301,16 +232,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnEncounterCleared OnEncounterCleared;
 
-	/** Sobreescribe el nombre de slot. Solo para tests automatizados. */
-	void ForceSlotName(const FString& Slot, int32 UserIdx = 0);
-
 protected:
 	void CopyCacheToPayload(UInTheDarkSaveGame& Payload) const;
 	void CopyPayloadToCache(const UInTheDarkSaveGame& Payload);
 	virtual bool MigrateSaveIfNeeded(UInTheDarkSaveGame& Payload);
 	UInTheDarkSaveGame* BuildPayload() const;
 	void HandleAsyncSaveCompleted(const FString& Slot, const int32 UserIndex, bool bSuccess);
-	void HandleAsyncLoadCompleted(const FString& Slot, const int32 UserIndex, USaveGame* Loaded);
 	void OnPostLoadMapWithWorld(UWorld* LoadedWorld);
 	void ResetCache();
 	FString GetSlotName(int32 SlotIndex) const;
@@ -320,7 +247,6 @@ protected:
 	void CapturePlayerSnapshot();
 
 private:
-	TArray<FSavedInventoryEntry> InventoryCache;
 	TArray<FSavedElementProgressionEntry> ElementProgressionCache;
 	FSavedCompanionPersonality CompanionPersonalityCache;
 	FSavedCompanionState CompanionStateCache;
@@ -336,7 +262,6 @@ private:
 	bool bHasLoadedSave = false;
 	bool bSaveDirty = false;
 	bool bAsyncSaveInFlight = false;
-	bool bAsyncLoadInFlight = false;
 	bool bRequestingSaveSnapshot = false;
 	FDelegateHandle PostLoadMapHandle;
 };

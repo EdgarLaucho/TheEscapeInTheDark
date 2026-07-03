@@ -39,7 +39,6 @@ void ACheckpointActor::HandleOverlap(UPrimitiveComponent*, AActor* OtherActor,
 		UGameplayStatics::GetGameInstance(World));
 	if (!GI) return;
 
-	// Copia el estado actual del jugador (salud ya sincronizada por BP_Player) y actualiza la posición.
 	FSavedPlayerState State = GI->GetPlayerState();
 	State.Transform = OtherActor->GetActorTransform();
 	State.LastCheckpointID = CheckpointID;

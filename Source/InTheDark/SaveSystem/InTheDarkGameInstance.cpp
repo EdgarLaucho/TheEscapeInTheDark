@@ -58,8 +58,6 @@ void UInTheDarkGameInstance::Shutdown()
 	Super::Shutdown();
 }
 
-// ── Auxiliares ──────────────────────────────────────────────
-
 FString UInTheDarkGameInstance::GetSlotName(int32 SlotIndex) const
 {
 	return FString::Printf(TEXT("Save_%d"), SlotIndex);
@@ -79,7 +77,6 @@ bool UInTheDarkGameInstance::IsMainMenuMap(const FString& MapName) const
 
 void UInTheDarkGameInstance::ResetCache()
 {
-	InventoryCache.Reset();
 	ElementProgressionCache.Reset();
 	CompanionPersonalityCache = FSavedCompanionPersonality();
 	CompanionStateCache = FSavedCompanionState();
@@ -94,12 +91,6 @@ void UInTheDarkGameInstance::ResetCache()
 bool UInTheDarkGameInstance::IsValidActorID(const FString& ActorID)
 {
 	return !ActorID.IsEmpty() && !ActorID.Equals(TEXT("None"), ESearchCase::IgnoreCase);
-}
-
-void UInTheDarkGameInstance::ForceSlotName(const FString& Slot, int32 UserIdx)
-{
-	SaveSlotName = Slot;
-	SaveUserIndex = UserIdx;
 }
 
 void UInTheDarkGameInstance::RequestSaveSnapshot()
@@ -125,8 +116,6 @@ void UInTheDarkGameInstance::CapturePlayerSnapshot()
 	bSaveDirty = true;
 }
 
-// ── Slots ─────────────────────────────────────────────────
-
 void UInTheDarkGameInstance::SwitchToSlot(int32 SlotIndex)
 {
 	if (!IsValidSlotIndex(SlotIndex))
@@ -134,9 +123,6 @@ void UInTheDarkGameInstance::SwitchToSlot(int32 SlotIndex)
 		UE_LOG(LogTemp, Warning, TEXT("SwitchToSlot: index %d out of range [0..%d)"), SlotIndex, MaxSlots);
 		return;
 	}
-	// No volcamos bSaveDirty aquí: este método se llama desde el menú principal, donde el único
-	// "dirty" posible es el nombre del mapa del menú que OnPostLoadMapWithWorld escribió en caché.
-	// Escribirlo corrompería el LastMapName del slot de destino antes de cargarlo.
 	CurrentSlotIndex = SlotIndex;
 	SaveSlotName = GetSlotName(SlotIndex);
 	LoadOrCreateSave();
@@ -249,8 +235,6 @@ void UInTheDarkGameInstance::OpenMainMenuWithoutSaving(UObject* WorldContextObje
 	UGameplayStatics::OpenLevel(WorldContextObject, MainMenuLevelName);
 }
 
-// ── Player State ──────────────────────────────────────────
-
 void UInTheDarkGameInstance::SavePlayerState(const FSavedPlayerState& State)
 {
 	PlayerStateCache = State;
@@ -280,98 +264,6 @@ FTransform UInTheDarkGameInstance::GetSpawnTransform(UObject* WorldContextObject
 	}
 	return FTransform::Identity;
 }
-
-// ── Inventory ─────────────────────────────────────────────
-
-void UInTheDarkGameInstance::SetCachedInventory(const TArray<FSavedInventoryEntry>& Inventory)
-{
-	InventoryCache = Inventory;
-	bSaveDirty = true;
-}
-
-void UInTheDarkGameInstance::AddInventoryEntry(FName ItemRowName, int32 Quantity)
-{
-	if (ItemRowName.IsNone() || Quantity <= 0) return;
-
-	for (FSavedInventoryEntry& Entry : InventoryCache)
-	{
-		if (Entry.ItemRowName == ItemRowName)
-		{
-			Entry.Quantity += Quantity;
-			bSaveDirty = true;
-			return;
-		}
-	}
-	InventoryCache.Emplace(ItemRowName, Quantity);
-	bSaveDirty = true;
-}
-
-void UInTheDarkGameInstance::RemoveInventoryEntry(FName ItemRowName, int32 Quantity)
-{
-	if (ItemRowName.IsNone() || Quantity <= 0) return;
-
-	for (int32 i = 0; i < InventoryCache.Num(); ++i)
-	{
-		if (InventoryCache[i].ItemRowName == ItemRowName)
-		{
-			InventoryCache[i].Quantity -= Quantity;
-			if (InventoryCache[i].Quantity <= 0)
-			{
-				InventoryCache.RemoveAt(i);
-			}
-			bSaveDirty = true;
-			return;
-		}
-	}
-}
-
-void UInTheDarkGameInstance::SetInventoryEntryQuantity(FName ItemRowName, int32 Quantity)
-{
-	if (ItemRowName.IsNone()) return;
-
-	for (int32 i = 0; i < InventoryCache.Num(); ++i)
-	{
-		if (InventoryCache[i].ItemRowName == ItemRowName)
-		{
-			if (Quantity <= 0)
-			{
-				InventoryCache.RemoveAt(i);
-			}
-			else
-			{
-				InventoryCache[i].Quantity = Quantity;
-			}
-			bSaveDirty = true;
-			return;
-		}
-	}
-	if (Quantity > 0)
-	{
-		InventoryCache.Emplace(ItemRowName, Quantity);
-		bSaveDirty = true;
-	}
-}
-
-int32 UInTheDarkGameInstance::GetInventoryEntryQuantity(FName ItemRowName) const
-{
-	for (const FSavedInventoryEntry& Entry : InventoryCache)
-	{
-		if (Entry.ItemRowName == ItemRowName)
-		{
-			return Entry.Quantity;
-		}
-	}
-	return 0;
-}
-
-void UInTheDarkGameInstance::ClearInventory()
-{
-	if (InventoryCache.Num() == 0) return;
-	InventoryCache.Reset();
-	bSaveDirty = true;
-}
-
-// ── World State ───────────────────────────────────────────
 
 void UInTheDarkGameInstance::MarkWorldActor(FName Category, const FString& ActorID)
 {
@@ -419,8 +311,6 @@ void UInTheDarkGameInstance::ClearWorldCategory(FName Category)
 	}
 }
 
-// ── Element Progression ───────────────────────────────────
-
 void UInTheDarkGameInstance::UpdateElementProgression(const FSavedElementProgressionEntry& Entry)
 {
 	if (Entry.ElementName.IsNone()) return;
@@ -451,8 +341,6 @@ void UInTheDarkGameInstance::ClearElementProgression()
 	bSaveDirty = true;
 }
 
-// ── Companion Personality ─────────────────────────────────
-
 void UInTheDarkGameInstance::UpdateCompanionPersonality(float Courage, float Anxiety, float Confidence, float AggressionAffinity, float StealthAffinity)
 {
 	CompanionPersonalityCache.Courage = Courage;
@@ -477,8 +365,6 @@ void UInTheDarkGameInstance::MarkCompanionAwoken(const FTransform& Transform, ui
 	UpdateCompanionState(Transform, CurrentStateValue, true);
 }
 
-// ── Tutorial ───────────────────────────────────────────────
-
 void UInTheDarkGameInstance::UpdateTutorialState(int32 SavedStep, bool bFinished)
 {
 	const int32 CleanStep = FMath::Max(0, SavedStep);
@@ -490,10 +376,6 @@ void UInTheDarkGameInstance::UpdateTutorialState(int32 SavedStep, bool bFinished
 	TutorialStateCache.bFinished = bFinished;
 	bSaveDirty = true;
 }
-
-// ── Encounters ────────────────────────────────────────────
-
-// ── Diálogos ──────────────────────────────────────────────
 
 bool UInTheDarkGameInstance::IsDialogueSeen(FName DialogueID) const
 {
@@ -508,8 +390,6 @@ void UInTheDarkGameInstance::MarkDialogueSeen(FName DialogueID)
 	if (SeenDialoguesCache.Num() > SizeBefore)
 		bSaveDirty = true;
 }
-
-// ── Encounters ──────────────────────────────────────────────
 
 void UInTheDarkGameInstance::MarkEncounterCleared(FName EncounterId)
 {
@@ -549,8 +429,6 @@ void UInTheDarkGameInstance::ClearEncounters()
 	bSaveDirty = true;
 }
 
-// ── Meta ──────────────────────────────────────────────────
-
 void UInTheDarkGameInstance::SetLastMapName(const FString& MapName)
 {
 	const FString CleanName = CleanMapNameForSave(MapName);
@@ -559,29 +437,23 @@ void UInTheDarkGameInstance::SetLastMapName(const FString& MapName)
 	bSaveDirty = true;
 }
 
-// ── Progress ──────────────────────────────────────────────
-
 void UInTheDarkGameInstance::ClearProgress()
 {
 	ResetCache();
 	bSaveDirty = true;
 }
 
-// ── Serialization ─────────────────────────────────────────
-
 void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) const
 {
 	Payload.SaveVersion = 1;
 	Payload.SavedAtUtc = FDateTime::UtcNow();
 	Payload.PlayerState = PlayerStateCache;
-	Payload.Inventory = InventoryCache;
 	Payload.ElementProgression = ElementProgressionCache;
 	Payload.CompanionPersonality = CompanionPersonalityCache;
 	Payload.CompanionState = CompanionStateCache;
 	Payload.TutorialState = TutorialStateCache;
 	Payload.LastMapName = CachedLastMapName;
 
-	// Estado del mundo: TMap<FName, TSet<FString>> -> TMap<FName, FWorldActorIDList>
 	Payload.WorldState.Reset();
 	for (const auto& Pair : WorldStateCache)
 	{
@@ -590,24 +462,20 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 		Payload.WorldState.Add(Pair.Key, MoveTemp(List));
 	}
 
-	// Encuentros: TSet<FName> -> TArray<FName>
 	Payload.ClearedEncounters = ClearedEncountersCache.Array();
 
-	// Diálogos: TSet<FName> -> TArray<FName>
 	Payload.SeenDialogues = SeenDialoguesCache.Array();
 }
 
 void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payload)
 {
 	PlayerStateCache = Payload.PlayerState;
-	InventoryCache = Payload.Inventory;
 	ElementProgressionCache = Payload.ElementProgression;
 	CompanionPersonalityCache = Payload.CompanionPersonality;
 	CompanionStateCache = Payload.CompanionState;
 	TutorialStateCache = Payload.TutorialState;
 	CachedLastMapName = Payload.LastMapName;
 
-	// Estado del mundo: TMap<FName, FWorldActorIDList> -> TMap<FName, TSet<FString>>
 	WorldStateCache.Reset();
 	for (const auto& Pair : Payload.WorldState)
 	{
@@ -618,14 +486,12 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 		}
 	}
 
-	// Encuentros: TArray<FName> -> TSet<FName>
 	ClearedEncountersCache.Reset();
 	for (const FName& Id : Payload.ClearedEncounters)
 	{
 		ClearedEncountersCache.Add(Id);
 	}
 
-	// Diálogos: TArray<FName> -> TSet<FName>
 	SeenDialoguesCache.Reset();
 	for (const FName& Id : Payload.SeenDialogues)
 	{
@@ -635,7 +501,6 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 
 bool UInTheDarkGameInstance::MigrateSaveIfNeeded(UInTheDarkSaveGame& Payload)
 {
-	// Añadir casos de migración aquí conforme evolucione SaveVersion.
 	if (Payload.SaveVersion <= 0)
 	{
 		Payload.SaveVersion = 1;
@@ -653,8 +518,6 @@ UInTheDarkSaveGame* UInTheDarkGameInstance::BuildPayload() const
 	}
 	return Payload;
 }
-
-// ── Disk IO ───────────────────────────────────────────────
 
 bool UInTheDarkGameInstance::DoesSaveSlotExist() const
 {
@@ -751,39 +614,6 @@ bool UInTheDarkGameInstance::LoadOrCreateSave()
 	return true;
 }
 
-void UInTheDarkGameInstance::LoadOrCreateSaveAsync()
-{
-	if (bAsyncLoadInFlight) return;
-
-	if (!UGameplayStatics::DoesSaveGameExist(SaveSlotName, SaveUserIndex))
-	{
-		LoadOrCreateSave();
-		return;
-	}
-
-	bAsyncLoadInFlight = true;
-	FAsyncLoadGameFromSlotDelegate Callback;
-	Callback.BindUObject(this, &UInTheDarkGameInstance::HandleAsyncLoadCompleted);
-	UGameplayStatics::AsyncLoadGameFromSlot(SaveSlotName, SaveUserIndex, Callback);
-}
-
-void UInTheDarkGameInstance::HandleAsyncLoadCompleted(const FString& Slot, const int32 UserIndex, USaveGame* Loaded)
-{
-	bAsyncLoadInFlight = false;
-
-	UInTheDarkSaveGame* Typed = Cast<UInTheDarkSaveGame>(Loaded);
-	if (!Typed || !MigrateSaveIfNeeded(*Typed))
-	{
-		bHasLoadedSave = false;
-		return;
-	}
-
-	CopyPayloadToCache(*Typed);
-	bHasLoadedSave = true;
-	bSaveDirty = false;
-	OnSaveLoaded.Broadcast();
-}
-
 bool UInTheDarkGameInstance::DeleteSave()
 {
 	const bool bOk = UGameplayStatics::DeleteGameInSlot(SaveSlotName, SaveUserIndex);
@@ -795,8 +625,6 @@ bool UInTheDarkGameInstance::DeleteSave()
 	}
 	return bOk;
 }
-
-// ── Map hook ──────────────────────────────────────────────
 
 void UInTheDarkGameInstance::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 {

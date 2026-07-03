@@ -3,24 +3,6 @@
 #include "CoreMinimal.h"
 #include "SaveTypes.generated.h"
 
-/** Entrada de inventario: nombre de fila + cantidad. */
-USTRUCT(BlueprintType)
-struct INTHEDARK_API FSavedInventoryEntry
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Inventory")
-	FName ItemRowName = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Inventory")
-	int32 Quantity = 0;
-
-	FSavedInventoryEntry() = default;
-	FSavedInventoryEntry(FName InRowName, int32 InQuantity)
-		: ItemRowName(InRowName), Quantity(InQuantity) {}
-};
-
-/** Estado del jugador en el momento del guardado. */
 USTRUCT(BlueprintType)
 struct INTHEDARK_API FSavedPlayerState
 {
@@ -42,7 +24,6 @@ struct INTHEDARK_API FSavedPlayerState
 	FName LastCheckpointID = NAME_None;
 };
 
-/** Progresión de un elemento guardada en disco. */
 USTRUCT(BlueprintType)
 struct INTHEDARK_API FSavedElementProgressionEntry
 {
@@ -70,7 +51,6 @@ struct INTHEDARK_API FSavedElementProgressionEntry
 	bool bUnlocked = false;
 };
 
-/** Personalidad del compañero IA guardada en disco. */
 USTRUCT(BlueprintType)
 struct INTHEDARK_API FSavedCompanionPersonality
 {
@@ -122,7 +102,6 @@ struct INTHEDARK_API FSavedTutorialState
 	bool bFinished = false;
 };
 
-/** Metadatos ligeros del slot mostrados en el menú de selección de guardado. */
 USTRUCT(BlueprintType)
 struct INTHEDARK_API FSaveSlotInfo
 {
