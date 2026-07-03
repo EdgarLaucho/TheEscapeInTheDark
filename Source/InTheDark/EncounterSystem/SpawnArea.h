@@ -48,6 +48,7 @@ struct INTHEDARK_API FSpawnAreaRules
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Despawn", meta = (ClampMin = 10.f, ClampMax = 180.f))
 	float VisibilityConeHalfAngle = 60.f;
+
 };
 
 UCLASS(Blueprintable, BlueprintType, meta = (DisplayName = "Spawn Area"))

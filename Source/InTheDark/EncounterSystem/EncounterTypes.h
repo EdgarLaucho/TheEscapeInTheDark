@@ -11,7 +11,7 @@ struct INTHEDARK_API FEnemySpawn
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn")
-	TSoftClassPtr<AActor> Enemy;
+	TSubclassOf<AActor> Enemy;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn", meta = (ClampMin = "1"))
 	int32 Count = 1;

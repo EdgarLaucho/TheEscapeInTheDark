@@ -51,16 +51,8 @@ private:
 	UPROPERTY(Transient)
 	FVector ClosedRelativeLocation = FVector::ZeroVector;
 
-	FTimerHandle GateMoveTimerHandle;
-	FVector MoveStartRelativeLocation = FVector::ZeroVector;
-	FVector MoveTargetRelativeLocation = FVector::ZeroVector;
-	float MoveElapsedSeconds = 0.f;
-	float MoveDurationSeconds = 0.f;
-
 	void ApplyLockState();
 	void SnapGateToState(bool bClosed);
-	void StartGateMove(bool bClosed);
-	void UpdateGateMove();
 	void SetGateCollisionEnabled(bool bEnabled);
 	FVector GetOpenRelativeLocation() const;
 };

@@ -21,16 +21,7 @@ public:
 	void ReleaseToPool(AActor* Actor);
 
 	UFUNCTION(BlueprintCallable, Category = "Object Pool")
-	void RegisterPool(TSubclassOf<AActor> ActorClass, const FPoolSettings& Settings);
-
-	UFUNCTION(BlueprintCallable, Category = "Object Pool", meta = (WorldContext = "WorldContextObject"))
-	void PrewarmPool(UObject* WorldContextObject, TSubclassOf<AActor> ActorClass, int32 Count);
-
-	UFUNCTION(BlueprintCallable, Category = "Object Pool")
 	void DrainAllPools();
-
-	UFUNCTION(BlueprintCallable, Category = "Object Pool", BlueprintPure)
-	bool HasPool(TSubclassOf<AActor> ActorClass) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Object Pool|Events")
 	FOnActorReleased OnActorReleased;
@@ -44,7 +35,6 @@ private:
 	void ActivateActor(AActor* Actor, const FTransform& Transform);
 	void CleanupPool(FObjectPool& Pool);
 	FObjectPool& EnsurePool(TSubclassOf<AActor> ActorClass);
-	bool CanAcquire(const FObjectPool& Pool) const;
 
 	void OnWorldCleanup(UWorld* World, bool bSessionEnded, bool bCleanupResources);
 	FDelegateHandle WorldCleanupHandle;

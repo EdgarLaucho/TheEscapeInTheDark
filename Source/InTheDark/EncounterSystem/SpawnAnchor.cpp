@@ -12,17 +12,13 @@ FTransform ASpawnAnchor::BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<
 
 	FTransform Result = SourceTransform;
 	Result.SetScale3D(ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector);
-	if (!World || !EnemyClass)
-	{
-		return Result;
-	}
+
+	if (!World || !EnemyClass) return Result;
 
 	const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
 	const float FloorOffset = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
-	if (FloorOffset <= 0.f)
-	{
-		return Result;
-	}
+
+	if (FloorOffset <= 0.f) return Result;
 
 	FVector Location = Result.GetLocation();
 	const FVector TraceStart = Location + FVector(0.f, 0.f, FMath::Max(500.f, FloorOffset + 200.f));
@@ -30,10 +26,8 @@ FTransform ASpawnAnchor::BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<
 
 	FHitResult Hit;
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterSpawnGroundTrace), false);
-	if (IgnoredActor)
-	{
-		QueryParams.AddIgnoredActor(IgnoredActor);
-	}
+
+	if (IgnoredActor) QueryParams.AddIgnoredActor(IgnoredActor);
 
 	if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
 	{
@@ -54,6 +48,7 @@ ASpawnAnchor::ASpawnAnchor()
 
 #if WITH_EDITORONLY_DATA
 	Billboard = CreateDefaultSubobject<UBillboardComponent>(TEXT("Billboard"));
+
 	if (Billboard)
 	{
 		Billboard->SetupAttachment(Root);
@@ -61,6 +56,7 @@ ASpawnAnchor::ASpawnAnchor()
 	}
 
 	Arrow = CreateDefaultSubobject<UArrowComponent>(TEXT("Facing"));
+
 	if (Arrow)
 	{
 		Arrow->SetupAttachment(Root);
@@ -79,12 +75,10 @@ void ASpawnAnchor::BeginPlay()
 bool ASpawnAnchor::IsAvailableForSpawn() const
 {
 	const UWorld* World = GetWorld();
-	if (!World) { return false; }
+	if (!World)  return false; 
 
-	if (PointCooldown > 0.f && World->GetTimeSeconds() - LastSpawnTimeSeconds < PointCooldown)
-	{
+	if (PointCooldown > 0.f && World->GetTimeSeconds() - LastSpawnTimeSeconds < PointCooldown) 
 		return false;
-	}
 
 	return true;
 }
@@ -92,16 +86,10 @@ bool ASpawnAnchor::IsAvailableForSpawn() const
 AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 {
 	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return nullptr;
-	}
+	
+	if (!World) return nullptr;
 
-	if (!EnemyClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ASpawnAnchor::PerformSpawn: null EnemyClass at %s"), *GetName());
-		return nullptr;
-	}
+	if (!EnemyClass) return nullptr;
 
 	LastSpawnTimeSeconds = World->GetTimeSeconds();
 	const FTransform SpawnTransform = BuildGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
@@ -111,10 +99,8 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
 		{
 			AActor* Acquired = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform);
-			if (Acquired)
-			{
-				return Acquired;
-			}
+
+			if (Acquired) return Acquired;
 		}
 	}
 
@@ -123,11 +109,5 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 	Params.Owner = GetOwner();
 
 	AActor* Spawned = World->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params);
-	
-	if (!Spawned)
-	{
-		UE_LOG(LogTemp, Error, TEXT("ASpawnAnchor::PerformSpawn: SpawnActor returned null for %s"), *EnemyClass->GetName());
-	}
-
 	return Spawned;
 }

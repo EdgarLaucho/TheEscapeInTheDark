@@ -46,49 +46,30 @@ void ACombatArena::BeginPlay()
 
 bool ACombatArena::LookupIsAlreadyCleared() const
 {
-	if (EncounterId.IsNone())
-	{
-		return false;
-	}
+	if (EncounterId.IsNone()) return false;
 
 	const UWorld* World = GetWorld();
-	if (!World)
-	{
-		return false;
-	}
+	if (!World) return false;
 
 	const UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(World));
 	return GI && GI->IsEncounterCleared(EncounterId);
 }
 
-void ACombatArena::HandleTriggerOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*,
-	int32, bool, const FHitResult&)
+void ACombatArena::HandleTriggerOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
-	if (bAlreadyStartedThisSession)
-	{
-		return;
-	}
+	if (bAlreadyStartedThisSession) return;
 
 	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 	const AActor* PlayerPawn = PC ? PC->GetPawn() : nullptr;
-	if (Other == PlayerPawn)
-	{
-		RequestStart();
-	}
+
+	if (Other == PlayerPawn) RequestStart();
 }
 
 void ACombatArena::RequestStart()
 {
-	if (bAlreadyStartedThisSession || LookupIsAlreadyCleared())
-	{
-		return;
-	}
+	if (bAlreadyStartedThisSession || LookupIsAlreadyCleared()) return;
 
-	if (!Director || !Config)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ACombatArena::RequestStart: missing Director or Config on %s"), *GetName());
-		return;
-	}
+	if (!Director || !Config) return;
 
 	bAlreadyStartedThisSession = true;
 	LockEntryGates();
@@ -97,10 +78,7 @@ void ACombatArena::RequestStart()
 
 void ACombatArena::NotifyEncounterCleared()
 {
-	if (bUnlockEntryGatesOnClear)
-	{
-		UnlockEntryGates();
-	}
+	if (bUnlockEntryGatesOnClear) UnlockEntryGates();
 
 	UnlockExitGates();
 
@@ -118,10 +96,7 @@ void ACombatArena::LockEntryGates()
 {
 	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
 	{
-		if (Gate)
-		{
-			Gate->Lock();
-		}
+		if (Gate) Gate->Lock();
 	}
 }
 
@@ -129,10 +104,7 @@ void ACombatArena::UnlockEntryGates()
 {
 	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
 	{
-		if (Gate)
-		{
-			Gate->Unlock();
-		}
+		if (Gate) Gate->Unlock();
 	}
 }
 
@@ -140,10 +112,7 @@ void ACombatArena::UnlockExitGates()
 {
 	for (const TObjectPtr<AEncounterGate>& Gate : ExitGates)
 	{
-		if (Gate)
-		{
-			Gate->Unlock();
-		}
+		if (Gate) Gate->Unlock();
 	}
 }
 

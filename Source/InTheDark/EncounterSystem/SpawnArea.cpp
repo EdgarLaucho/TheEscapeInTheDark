@@ -54,10 +54,8 @@ void ASpawnArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ASpawnArea::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	if (ActivationVolume)
-	{
-		ActivationVolume->SetSphereRadius(Rules.AreaRadius);
-	}
+
+	if (ActivationVolume) ActivationVolume->SetSphereRadius(Rules.AreaRadius);
 }
 
 void ASpawnArea::Activate()
@@ -77,26 +75,17 @@ void ASpawnArea::Deactivate()
 
 	ApplyLeashStateToActiveEnemies();
 
-	if (!ActiveEnemies.IsEmpty())
-	{
-		GetWorld()->GetTimerManager().SetTimer(DespawnCheckHandle, this, &ASpawnArea::CheckDespawnOnLeave, 0.5f, true);
-	}
+	if (!ActiveEnemies.IsEmpty()) GetWorld()->GetTimerManager().SetTimer(DespawnCheckHandle, this, &ASpawnArea::CheckDespawnOnLeave, 0.5f, true);
 }
 
 void ASpawnArea::SetPlayerInside(bool bNewPlayerInside)
 {
-	if (bPlayerInside == bNewPlayerInside) { return; }
+	if (bPlayerInside == bNewPlayerInside) return;
 
 	bPlayerInside = bNewPlayerInside;
 
-	if (bPlayerInside)
-	{
-		Activate();
-	}
-	else
-	{
-		Deactivate();
-	}
+	if (bPlayerInside) Activate();
+	else Deactivate();
 }
 
 void ASpawnArea::RefreshPlayerInsideState()
@@ -107,12 +96,10 @@ void ASpawnArea::RefreshPlayerInsideState()
 bool ASpawnArea::IsPlayerInsideArea() const
 {
 	const AActor* Player = GetPlayerActor();
-	if (!Player || !ActivationVolume) { return false; }
 
-	if (ActivationVolume->IsOverlappingActor(Player))
-	{
-		return true;
-	}
+	if (!Player || !ActivationVolume) return false;
+
+	if (ActivationVolume->IsOverlappingActor(Player)) return true;
 
 	const float Radius = ActivationVolume->GetScaledSphereRadius();
 	return FVector::DistSquared(Player->GetActorLocation(), ActivationVolume->GetComponentLocation()) <= FMath::Square(Radius);
@@ -121,20 +108,20 @@ bool ASpawnArea::IsPlayerInsideArea() const
 void ASpawnArea::DespawnAll()
 {
 	TArray<TWeakObjectPtr<AActor>> ToRelease = ActiveEnemies;
+
 	for (TWeakObjectPtr<AActor>& W : ToRelease)
 	{
-		if (AActor* Enemy = W.Get())
-		{
-			ReleaseEnemy(Enemy);
-		}
+		if (AActor* Enemy = W.Get()) ReleaseEnemy(Enemy);
 	}
+
 	ActiveEnemies.Empty();
 }
 
 void ASpawnArea::OnOverlapBegin(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC || Other != PC->GetPawn()) { return; }
+
+	if (!PC || Other != PC->GetPawn()) return;
 
 	SetPlayerInside(true);
 }
@@ -142,7 +129,8 @@ void ASpawnArea::OnOverlapBegin(UPrimitiveComponent*, AActor* Other, UPrimitiveC
 void ASpawnArea::OnOverlapEnd(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32)
 {
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC || Other != PC->GetPawn()) { return; }
+
+	if (!PC || Other != PC->GetPawn()) return;
 
 	RefreshPlayerInsideState();
 }
@@ -155,6 +143,7 @@ void ASpawnArea::OnEnemyDestroyed(AActor* DestroyedActor)
 	});
 
 	CleanDeadEntries();
+
 	if (ActiveEnemies.IsEmpty() && !bPlayerInside)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
@@ -166,10 +155,11 @@ void ASpawnArea::TrySpawn()
 {
 	CleanDeadEntries();
 
-	if (ActiveEnemies.Num() >= Rules.MaxSimultaneous) { return; }
+	if (ActiveEnemies.Num() >= Rules.MaxSimultaneous) return;
 
 	TSubclassOf<AActor> EnemyClass = PickEnemyClass();
-	if (!EnemyClass) { return; }
+
+	if (!EnemyClass) return;
 
 	RegisterSpawnedEnemy(SpawnEnemy(EnemyClass));
 }
@@ -177,19 +167,15 @@ void ASpawnArea::TrySpawn()
 AActor* ASpawnArea::SpawnEnemy(TSubclassOf<AActor> EnemyClass)
 {
 	FTransform SpawnTransform;
-	if (!GetRandomSpawnTransform(SpawnTransform))
-	{
-		return nullptr;
-	}
+
+	if (!GetRandomSpawnTransform(SpawnTransform)) return nullptr;
 
 	SpawnTransform = ASpawnAnchor::BuildGroundedSpawnTransform(GetWorld(), EnemyClass, SpawnTransform, this);
 
 	if (UObjectPoolSubsystem* Pool = GetPool())
 	{
 		if (AActor* Spawned = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform))
-		{
 			return Spawned;
-		}
 	}
 
 	FActorSpawnParameters Params;
@@ -214,10 +200,8 @@ void ASpawnArea::EnforceLeash()
 
 	if (ActiveEnemies.IsEmpty())
 	{
-		if (!bPlayerInside)
-		{
-			GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
-		}
+		if (!bPlayerInside) GetWorld()->GetTimerManager().ClearTimer(LeashTimerHandle);
+
 		return;
 	}
 
@@ -236,26 +220,24 @@ void ASpawnArea::CheckDespawnOnLeave()
 	}
 
 	const AActor* Player = GetPlayerActor();
-	if (!Player) { return; }
+
+	if (!Player) return;
 
 	const float DespawnRadiusSq = FMath::Square(Rules.AreaRadius + Rules.DespawnOffset);
-	if (FVector::DistSquared(Player->GetActorLocation(), GetActorLocation()) < DespawnRadiusSq)
-	{
-		return;
-	}
+
+	if (FVector::DistSquared(Player->GetActorLocation(), GetActorLocation()) < DespawnRadiusSq) return;
 
 	CleanDeadEntries();
 
 	TArray<AActor*> ToRelease;
+
 	for (const TWeakObjectPtr<AActor>& WeakEnemy : ActiveEnemies)
 	{
 		AActor* Enemy = WeakEnemy.Get();
-		if (!Enemy) { continue; }
+		if (!Enemy) continue;
 
 		if (!Rules.bRequireOutOfSightToDespawn || !IsVisibleToPlayer(Enemy))
-		{
 			ToRelease.Add(Enemy);
-		}
 	}
 
 	for (AActor* Enemy : ToRelease)
@@ -274,7 +256,7 @@ void ASpawnArea::CheckDespawnOnLeave()
 
 void ASpawnArea::ReleaseEnemy(AActor* Enemy)
 {
-	if (!Enemy) { return; }
+	if (!Enemy) return;
 
 	Enemy->OnDestroyed.RemoveDynamic(this, &ASpawnArea::OnEnemyDestroyed);
 	ActiveEnemies.RemoveAll([Enemy](const TWeakObjectPtr<AActor>& W)
@@ -294,24 +276,19 @@ void ASpawnArea::ReleaseEnemy(AActor* Enemy)
 
 void ASpawnArea::ApplyLeashState(AActor* Enemy) const
 {
-	if (!Enemy) { return; }
+	if (!Enemy) return;
 
 	ULeashComponent* Leash = Enemy->FindComponentByClass<ULeashComponent>();
-	if (!Leash) { return; }
+
+	if (!Leash) return;
 
 	if (bPlayerInside)
 	{
-		if (Leash->IsLeashActive())
-		{
-			Leash->DeactivateLeash();
-		}
+		if (Leash->IsLeashActive()) Leash->DeactivateLeash();
 	}
 	else
 	{
-		if (!Leash->IsLeashActive())
-		{
-			Leash->ActivateLeash(GetActorLocation());
-		}
+		if (!Leash->IsLeashActive()) Leash->ActivateLeash(GetActorLocation());
 	}
 }
 
@@ -326,7 +303,7 @@ void ASpawnArea::ApplyLeashStateToActiveEnemies() const
 bool ASpawnArea::IsVisibleToPlayer(const AActor* Enemy) const
 {
 	const AActor* Player = GetPlayerActor();
-	if (!Player || !Enemy) { return false; }
+	if (!Player || !Enemy) return false;
 
 	const FVector ToEnemy = (Enemy->GetActorLocation() - Player->GetActorLocation()).GetSafeNormal();
 	const float CosHalfAngle = FMath::Cos(FMath::DegreesToRadians(Rules.VisibilityConeHalfAngle));
@@ -350,16 +327,13 @@ bool ASpawnArea::GetRandomSpawnTransform(FTransform& OutTransform) const
 		if (UWorld* World = GetWorld())
 		{
 			FHitResult Hit;
+
 			if (World->LineTraceSingleByChannel(Hit, Candidate, Candidate - FVector(0.f, 0.f, 1000.f), ECC_WorldStatic))
-			{
 				Candidate = Hit.ImpactPoint + FVector(0.f, 0.f, 10.f);
-			}
 		}
 
 		if (Player && FVector::DistSquared(Candidate, Player->GetActorLocation()) < FMath::Square(MinPlayerDist))
-		{
 			continue;
-		}
 
 		const float Yaw = FMath::RandRange(0.f, 360.f);
 		OutTransform = FTransform(FRotator(0.f, Yaw, 0.f), Candidate);
@@ -375,31 +349,24 @@ TSubclassOf<AActor> ASpawnArea::PickEnemyClass() const
 
 	for (const FSpawnAreaEntry& Entry : EnemyEntries)
 	{
-		if (!Entry.EnemyClass) { continue; }
+		if (!Entry.EnemyClass) continue;
 
-		if (CountActiveOfClass(Entry.EnemyClass) < Entry.MaxCount)
-		{
-			TotalWeight += Entry.Weight;
-		}
+		if (CountActiveOfClass(Entry.EnemyClass) < Entry.MaxCount) TotalWeight += Entry.Weight;
 	}
 
-	if (TotalWeight <= 0.f) { return nullptr; }
+	if (TotalWeight <= 0.f) return nullptr;
 
 	float Rand = FMath::RandRange(0.f, TotalWeight);
 	TSubclassOf<AActor> LastEligible = nullptr;
+
 	for (const FSpawnAreaEntry& Entry : EnemyEntries)
 	{
-		if (!Entry.EnemyClass || CountActiveOfClass(Entry.EnemyClass) >= Entry.MaxCount)
-		{
-			continue;
-		}
+		if (!Entry.EnemyClass || CountActiveOfClass(Entry.EnemyClass) >= Entry.MaxCount) continue;
 
 		LastEligible = Entry.EnemyClass;
 		Rand -= Entry.Weight;
-		if (Rand <= 0.f)
-		{
-			return Entry.EnemyClass;
-		}
+
+		if (Rand <= 0.f) return Entry.EnemyClass;
 	}
 
 	return LastEligible;
@@ -411,7 +378,8 @@ int32 ASpawnArea::CountActiveOfClass(TSubclassOf<AActor> Class) const
 	for (const TWeakObjectPtr<AActor>& W : ActiveEnemies)
 	{
 		const AActor* A = W.Get();
-		if (A && A->GetClass()->IsChildOf(Class)) { ++Count; }
+
+		if (A && A->GetClass()->IsChildOf(Class)) ++Count;
 	}
 
 	return Count;
@@ -428,7 +396,7 @@ void ASpawnArea::CleanDeadEntries()
 AActor* ASpawnArea::GetPlayerActor() const
 {
 	const UWorld* World = GetWorld();
-	if (!World) { return nullptr; }
+	if (!World) return nullptr;
 
 	const APlayerController* PC = World->GetFirstPlayerController();
 	return PC ? PC->GetPawn() : nullptr;
