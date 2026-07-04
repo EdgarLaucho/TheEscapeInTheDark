@@ -6,6 +6,7 @@
 #include "ElementalSwitch.generated.h"
 
 class UStaticMeshComponent;
+class UBoxComponent;
 class AElementalGateDoor;
 
 UCLASS(Blueprintable, BlueprintType)
@@ -33,6 +34,9 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Switch|Components")
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Switch|Components")
+	TObjectPtr<UBoxComponent> HitBox;
 
 private:
 	UPROPERTY(Transient)

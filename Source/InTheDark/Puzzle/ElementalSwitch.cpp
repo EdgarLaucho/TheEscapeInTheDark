@@ -1,16 +1,25 @@
 #include "Puzzle/ElementalSwitch.h"
 #include "Puzzle/ElementalGateDoor.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/BoxComponent.h"
 
 static FName NormalizeElementName(FName ElementName)
 {
-	if (ElementName == TEXT("NewEnumerator0")) return TEXT("Air");
-	if (ElementName == TEXT("NewEnumerator1")) return TEXT("Fire");
-	if (ElementName == TEXT("NewEnumerator2")) return TEXT("Water");
-	if (ElementName == TEXT("NewEnumerator3")) return TEXT("Earth");
-	if (ElementName == TEXT("NewEnumerator4")) return TEXT("AirFire");
+	FString AsString = ElementName.ToString();
 
-	return ElementName;
+	int32 SeparatorIndex;
+	if (AsString.FindLastChar(TEXT(':'), SeparatorIndex))
+	{
+		AsString = AsString.Mid(SeparatorIndex + 1);
+	}
+
+	if (AsString == TEXT("NewEnumerator0")) return TEXT("Air");
+	if (AsString == TEXT("NewEnumerator1")) return TEXT("Fire");
+	if (AsString == TEXT("NewEnumerator2")) return TEXT("Water");
+	if (AsString == TEXT("NewEnumerator3")) return TEXT("Earth");
+	if (AsString == TEXT("NewEnumerator4")) return TEXT("AirFire");
+
+	return FName(*AsString);
 }
 
 AElementalSwitch::AElementalSwitch()
@@ -19,8 +28,13 @@ AElementalSwitch::AElementalSwitch()
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(MeshComponent);
-	MeshComponent->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
-	MeshComponent->SetGenerateOverlapEvents(true);
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	HitBox = CreateDefaultSubobject<UBoxComponent>(TEXT("HitBox"));
+	HitBox->SetupAttachment(MeshComponent);
+	HitBox->SetBoxExtent(FVector(150.f, 150.f, 150.f));
+	HitBox->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	HitBox->SetGenerateOverlapEvents(true);
 }
 
 void AElementalSwitch::OnElementHit_Implementation(FName ElementName, AActor* HitInstigator)
@@ -33,7 +47,11 @@ void AElementalSwitch::OnElementHit_Implementation(FName ElementName, AActor* Hi
 	if (MeshComponent)
 	{
 		MeshComponent->SetVisibility(false, true);
-		MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (HitBox)
+	{
+		HitBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	OnSwitchActivated();
