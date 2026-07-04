@@ -118,14 +118,13 @@ void ACombatArena::UnlockExitGates()
 
 void ACombatArena::UnlockGatesForClearedState()
 {
-	if (bUnlockEntryGatesOnClear)
+	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
 	{
-		UnlockEntryGates();
-	}
-	else
-	{
-		LockEntryGates();
+		if (Gate) Gate->SetLockedInstant(!bUnlockEntryGatesOnClear);
 	}
 
-	UnlockExitGates();
+	for (const TObjectPtr<AEncounterGate>& Gate : ExitGates)
+	{
+		if (Gate) Gate->SetLockedInstant(false);
+	}
 }

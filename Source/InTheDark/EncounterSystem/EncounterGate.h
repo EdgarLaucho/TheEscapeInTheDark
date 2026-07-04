@@ -20,8 +20,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gate")
 	void Unlock();
 
+	UFUNCTION(BlueprintCallable, Category = "Gate")
+	void SetLockedInstant(bool bNewLocked);
+
 	UFUNCTION(BlueprintPure, Category = "Gate")
 	bool IsLocked() const { return bLocked; }
+
+	UFUNCTION(BlueprintPure, Category = "Gate")
+	FVector GetOpenRelativeLocation() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Gate")
 	void OnGateLocked();
@@ -44,15 +50,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate", meta = (ClampMin = "0.0"))
 	float SinkTime = 0.8f;
 
+protected:
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Gate")
+	FVector ClosedRelativeLocation = FVector::ZeroVector;
+
 private:
 	UPROPERTY(Transient)
 	bool bLocked = false;
 
-	UPROPERTY(Transient)
-	FVector ClosedRelativeLocation = FVector::ZeroVector;
-
 	void ApplyLockState();
 	void SnapGateToState(bool bClosed);
 	void SetGateCollisionEnabled(bool bEnabled);
-	FVector GetOpenRelativeLocation() const;
 };

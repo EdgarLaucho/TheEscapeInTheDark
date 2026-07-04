@@ -43,6 +43,12 @@ void AEncounterGate::Unlock()
 	OnGateUnlocked();
 }
 
+void AEncounterGate::SetLockedInstant(bool bNewLocked)
+{
+	bLocked = bNewLocked;
+	ApplyLockState();
+}
+
 void AEncounterGate::ApplyLockState()
 {
 	SetGateCollisionEnabled(bLocked);
