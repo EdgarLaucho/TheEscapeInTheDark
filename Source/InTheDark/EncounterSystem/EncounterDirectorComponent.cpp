@@ -314,6 +314,8 @@ void UEncounterDirectorComponent::HandleEncounterCleared()
 void UEncounterDirectorComponent::HandleEnemyLeftContainment(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (State != EEncounterState::WaveActive) return;
+	if (!IsValid(OtherActor) || OtherActor->IsActorBeingDestroyed() || OtherActor->IsHidden() || !OtherActor->GetActorEnableCollision()) return;
+	if (OtherComp && OtherComp->GetCollisionEnabled() == ECollisionEnabled::NoCollision) return;
 
 	const bool bIsTrackedEnemy = AliveEnemies.ContainsByPredicate([OtherActor](const TWeakObjectPtr<AActor>& E)
 	{
@@ -342,5 +344,6 @@ void UEncounterDirectorComponent::ReturnEnemyToAnchor(AActor* Enemy)
 			Movement->StopMovementImmediately();
 	}
 
-	Enemy->SetActorLocation(Anchor->GetActorLocation(), false, nullptr, ETeleportType::TeleportPhysics);
+	const FTransform ReturnTransform = ASpawnAnchor::BuildGroundedSpawnTransform(GetWorld(), Enemy->GetClass(), Anchor->GetActorTransform(), Anchor);
+	Enemy->SetActorLocation(ReturnTransform.GetLocation(), false, nullptr, ETeleportType::TeleportPhysics);
 }
