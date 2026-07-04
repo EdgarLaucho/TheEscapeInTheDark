@@ -25,6 +25,14 @@ ACombatArena::ACombatArena()
 	TriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	TriggerVolume->SetGenerateOverlapEvents(true);
 
+	ContainmentVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("ContainmentVolume"));
+	ContainmentVolume->SetupAttachment(Root);
+	ContainmentVolume->SetBoxExtent(FVector(1500.f, 1500.f, 500.f));
+	ContainmentVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	ContainmentVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+	ContainmentVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	ContainmentVolume->SetGenerateOverlapEvents(true);
+
 	Director = CreateDefaultSubobject<UEncounterDirectorComponent>(TEXT("Director"));
 }
 

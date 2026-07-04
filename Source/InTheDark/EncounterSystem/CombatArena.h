@@ -49,6 +49,9 @@ public:
 	TObjectPtr<UBoxComponent> TriggerVolume;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Encounter|Components")
+	TObjectPtr<UBoxComponent> ContainmentVolume;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Encounter|Components")
 	TObjectPtr<UEncounterDirectorComponent> Director;
 
 	UFUNCTION(BlueprintCallable, Category = "Encounter")

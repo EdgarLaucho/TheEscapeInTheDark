@@ -4,7 +4,10 @@
 #include "EncounterSystem/EncounterTargetInterface.h"
 #include "EncounterSystem/SpawnAnchor.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Components/BoxComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
@@ -62,6 +65,12 @@ void UEncounterDirectorComponent::StartEncounter()
 
 	if (UObjectPoolSubsystem* Pool = GetPool())
 		Pool->OnActorReleased.AddUniqueDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
+
+	if (ACombatArena* Arena = GetArena())
+	{
+		if (Arena->ContainmentVolume)
+			Arena->ContainmentVolume->OnComponentEndOverlap.AddUniqueDynamic(this, &UEncounterDirectorComponent::HandleEnemyLeftContainment);
+	}
 
 	BeginNextWave();
 }
@@ -273,5 +282,44 @@ void UEncounterDirectorComponent::HandleEncounterCleared()
 		Pool->OnActorReleased.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
 
 	if (ACombatArena* Arena = GetArena())
+	{
+		if (Arena->ContainmentVolume)
+			Arena->ContainmentVolume->OnComponentEndOverlap.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyLeftContainment);
+
 		Arena->NotifyEncounterCleared();
+	}
+}
+
+void UEncounterDirectorComponent::HandleEnemyLeftContainment(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (State != EEncounterState::WaveActive) return;
+
+	const bool bIsTrackedEnemy = AliveEnemies.ContainsByPredicate([OtherActor](const TWeakObjectPtr<AActor>& E)
+	{
+		return E.Get() == OtherActor;
+	});
+
+	if (bIsTrackedEnemy) ReturnEnemyToAnchor(OtherActor);
+}
+
+void UEncounterDirectorComponent::ReturnEnemyToAnchor(AActor* Enemy)
+{
+	if (!Enemy) return;
+
+	const ASpawnAnchor* Anchor = ChooseFreeAnchor();
+	if (!Anchor)
+	{
+		const ACombatArena* Arena = GetArena();
+		Anchor = Arena && !Arena->Anchors.IsEmpty() ? Arena->Anchors[0] : nullptr;
+	}
+
+	if (!Anchor) return;
+
+	if (ACharacter* Character = Cast<ACharacter>(Enemy))
+	{
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+			Movement->StopMovementImmediately();
+	}
+
+	Enemy->SetActorLocation(Anchor->GetActorLocation(), false, nullptr, ETeleportType::TeleportPhysics);
 }

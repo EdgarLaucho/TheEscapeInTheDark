@@ -9,6 +9,7 @@ class UEncounterConfig;
 class ASpawnAnchor;
 class ACombatArena;
 class UObjectPoolSubsystem;
+class UPrimitiveComponent;
 struct FStreamableHandle;
 
 UENUM()
@@ -65,6 +66,11 @@ private:
 
 	UFUNCTION()
 	void HandleEnemyReleasedToPool(AActor* ReleasedActor);
+
+	UFUNCTION()
+	void HandleEnemyLeftContainment(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+	void ReturnEnemyToAnchor(AActor* Enemy);
 
 	ACombatArena* GetArena() const;
 	UEncounterConfig* GetConfig() const;
