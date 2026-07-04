@@ -181,6 +181,10 @@ void UObjectPoolSubsystem::DeactivateActor(AActor* Actor)
 {
 	if (!IsValid(Actor)) return;
 
+	Actor->SetActorHiddenInGame(true);
+	Actor->SetActorEnableCollision(false);
+	Actor->SetActorTickEnabled(false);
+
 	if (ACharacter* Character = Cast<ACharacter>(Actor))
 	{
 		if (AAIController* AIC = Cast<AAIController>(Character->GetController()))

@@ -71,6 +71,7 @@ private:
 	UFUNCTION()
 	void HandleEnemyLeftContainment(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
+	bool IsEnemyPendingRemoval(const AActor* Enemy) const;
 	void ReturnEnemyToAnchor(AActor* Enemy);
 
 	ACombatArena* GetArena() const;
