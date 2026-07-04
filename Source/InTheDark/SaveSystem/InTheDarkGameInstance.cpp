@@ -23,15 +23,18 @@ namespace
 		{
 			int32 FirstUnder = INDEX_NONE;
 			int32 SecondUnder = INDEX_NONE;
+
 			if (MapName.FindChar(TEXT('_'), FirstUnder))
 			{
 				const FString AfterPrefix = MapName.Mid(FirstUnder + 1);
+
 				if (AfterPrefix.FindChar(TEXT('_'), SecondUnder))
 				{
 					MapName = AfterPrefix.Mid(SecondUnder + 1);
 				}
 			}
 		}
+
 		return MapName;
 	}
 }
@@ -39,9 +42,9 @@ namespace
 void UInTheDarkGameInstance::Init()
 {
 	Super::Init();
-	PostLoadMapHandle = FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
-		this, &UInTheDarkGameInstance::OnPostLoadMapWithWorld);
+	PostLoadMapHandle = FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UInTheDarkGameInstance::OnPostLoadMapWithWorld);
 	SaveSlotName = GetSlotName(CurrentSlotIndex);
+	LoadOrCreateSave();
 }
 
 void UInTheDarkGameInstance::Shutdown()
@@ -51,10 +54,12 @@ void UInTheDarkGameInstance::Shutdown()
 		FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapHandle);
 		PostLoadMapHandle.Reset();
 	}
+
 	if (bSaveDirty)
 	{
 		WriteSaveToDisk();
 	}
+
 	Super::Shutdown();
 }
 
@@ -71,6 +76,7 @@ bool UInTheDarkGameInstance::IsValidSlotIndex(int32 SlotIndex) const
 bool UInTheDarkGameInstance::IsMainMenuMap(const FString& MapName) const
 {
 	if (MainMenuLevelName.IsNone()) return false;
+
 	const FString MenuName = MainMenuLevelName.ToString();
 	return MapName.Equals(MenuName) || MapName.EndsWith(TEXT("_") + MenuName);
 }
@@ -118,11 +124,8 @@ void UInTheDarkGameInstance::CapturePlayerSnapshot()
 
 void UInTheDarkGameInstance::SwitchToSlot(int32 SlotIndex)
 {
-	if (!IsValidSlotIndex(SlotIndex))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("SwitchToSlot: index %d out of range [0..%d)"), SlotIndex, MaxSlots);
-		return;
-	}
+	if (!IsValidSlotIndex(SlotIndex)) return;
+
 	CurrentSlotIndex = SlotIndex;
 	SaveSlotName = GetSlotName(SlotIndex);
 	LoadOrCreateSave();
@@ -164,10 +167,12 @@ TArray<FSaveSlotInfo> UInTheDarkGameInstance::GetAllSlotInfos() const
 {
 	TArray<FSaveSlotInfo> Result;
 	Result.Reserve(MaxSlots);
+
 	for (int32 i = 0; i < MaxSlots; ++i)
 	{
 		Result.Add(GetSlotInfo(i));
 	}
+
 	return Result;
 }
 
@@ -205,16 +210,18 @@ void UInTheDarkGameInstance::ContinueGameFromMenu(UObject* WorldContextObject, i
 
 	SwitchToSlot(SlotIndex);
 	FName TargetLevel = DefaultGameLevelName;
+
 	if (!CachedLastMapName.IsEmpty() && !IsMainMenuMap(CachedLastMapName))
 	{
 		FString SavedMapName = CachedLastMapName;
 		const FString DefaultMapName = DefaultGameLevelName.ToString();
+
 		if (!SavedMapName.Equals(DefaultMapName) && DefaultMapName.EndsWith(SavedMapName))
-		{
 			SavedMapName = DefaultMapName;
-		}
+
 		TargetLevel = FName(*SavedMapName);
 	}
+
 	UGameplayStatics::SetGamePaused(WorldContextObject, false);
 	UGameplayStatics::OpenLevel(WorldContextObject, TargetLevel);
 }
@@ -222,9 +229,8 @@ void UInTheDarkGameInstance::ContinueGameFromMenu(UObject* WorldContextObject, i
 void UInTheDarkGameInstance::SaveCurrentGameAndOpenMainMenu(UObject* WorldContextObject)
 {
 	if (bSaveDirty)
-	{
 		WriteSaveToDisk();
-	}
+
 	OpenMainMenuWithoutSaving(WorldContextObject);
 }
 
@@ -257,11 +263,13 @@ FTransform UInTheDarkGameInstance::GetSpawnTransform(UObject* WorldContextObject
 		return PlayerStateCache.Transform;
 
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+
 	if (World)
 	{
 		for (TActorIterator<APlayerStart> It(World); It; ++It)
 			return (*It)->GetActorTransform();
 	}
+
 	return FTransform::Identity;
 }
 
@@ -272,10 +280,8 @@ void UInTheDarkGameInstance::MarkWorldActor(FName Category, const FString& Actor
 	TSet<FString>& Set = WorldStateCache.FindOrAdd(Category);
 	const int32 SizeBefore = Set.Num();
 	Set.Add(ActorID);
-	if (Set.Num() > SizeBefore)
-	{
-		bSaveDirty = true;
-	}
+
+	if (Set.Num() > SizeBefore) bSaveDirty = true;
 }
 
 void UInTheDarkGameInstance::UnmarkWorldActor(FName Category, const FString& ActorID)
@@ -284,10 +290,7 @@ void UInTheDarkGameInstance::UnmarkWorldActor(FName Category, const FString& Act
 	if (Set && Set->Remove(ActorID) > 0)
 	{
 		bSaveDirty = true;
-		if (Set->Num() == 0)
-		{
-			WorldStateCache.Remove(Category);
-		}
+		if (Set->Num() == 0) WorldStateCache.Remove(Category);
 	}
 }
 
@@ -305,10 +308,7 @@ TArray<FString> UInTheDarkGameInstance::GetMarkedActors(FName Category) const
 
 void UInTheDarkGameInstance::ClearWorldCategory(FName Category)
 {
-	if (WorldStateCache.Remove(Category) > 0)
-	{
-		bSaveDirty = true;
-	}
+	if (WorldStateCache.Remove(Category) > 0) bSaveDirty = true;
 }
 
 void UInTheDarkGameInstance::UpdateElementProgression(const FSavedElementProgressionEntry& Entry)
@@ -324,6 +324,7 @@ void UInTheDarkGameInstance::UpdateElementProgression(const FSavedElementProgres
 			return;
 		}
 	}
+
 	ElementProgressionCache.Add(Entry);
 	bSaveDirty = true;
 }
@@ -385,8 +386,10 @@ bool UInTheDarkGameInstance::IsDialogueSeen(FName DialogueID) const
 void UInTheDarkGameInstance::MarkDialogueSeen(FName DialogueID)
 {
 	if (DialogueID.IsNone()) return;
+
 	const int32 SizeBefore = SeenDialoguesCache.Num();
 	SeenDialoguesCache.Add(DialogueID);
+
 	if (SeenDialoguesCache.Num() > SizeBefore)
 		bSaveDirty = true;
 }
@@ -397,6 +400,7 @@ void UInTheDarkGameInstance::MarkEncounterCleared(FName EncounterId)
 
 	const int32 SizeBefore = ClearedEncountersCache.Num();
 	ClearedEncountersCache.Add(EncounterId);
+
 	if (ClearedEncountersCache.Num() > SizeBefore)
 	{
 		bSaveDirty = true;
@@ -407,9 +411,7 @@ void UInTheDarkGameInstance::MarkEncounterCleared(FName EncounterId)
 void UInTheDarkGameInstance::UnmarkEncounterCleared(FName EncounterId)
 {
 	if (ClearedEncountersCache.Remove(EncounterId) > 0)
-	{
 		bSaveDirty = true;
-	}
 }
 
 bool UInTheDarkGameInstance::IsEncounterCleared(FName EncounterId) const
@@ -455,6 +457,7 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 	Payload.LastMapName = CachedLastMapName;
 
 	Payload.WorldState.Reset();
+
 	for (const auto& Pair : WorldStateCache)
 	{
 		FWorldActorIDList List;
@@ -463,7 +466,6 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 	}
 
 	Payload.ClearedEncounters = ClearedEncountersCache.Array();
-
 	Payload.SeenDialogues = SeenDialoguesCache.Array();
 }
 
@@ -501,21 +503,15 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 
 bool UInTheDarkGameInstance::MigrateSaveIfNeeded(UInTheDarkSaveGame& Payload)
 {
-	if (Payload.SaveVersion <= 0)
-	{
-		Payload.SaveVersion = 1;
-	}
+	if (Payload.SaveVersion <= 0) Payload.SaveVersion = 1;
 	return true;
 }
 
 UInTheDarkSaveGame* UInTheDarkGameInstance::BuildPayload() const
 {
-	UInTheDarkSaveGame* Payload = Cast<UInTheDarkSaveGame>(
-		UGameplayStatics::CreateSaveGameObject(UInTheDarkSaveGame::StaticClass()));
-	if (Payload)
-	{
-		CopyCacheToPayload(*Payload);
-	}
+	UInTheDarkSaveGame* Payload = Cast<UInTheDarkSaveGame>(UGameplayStatics::CreateSaveGameObject(UInTheDarkSaveGame::StaticClass()));
+
+	if (Payload) CopyCacheToPayload(*Payload);
 	return Payload;
 }
 
@@ -529,13 +525,11 @@ bool UInTheDarkGameInstance::WriteSaveToDisk()
 	RequestSaveSnapshot();
 
 	UInTheDarkSaveGame* Payload = BuildPayload();
-	if (!Payload)
-	{
-		UE_LOG(LogTemp, Error, TEXT("WriteSaveToDisk: failed to create payload."));
-		return false;
-	}
+
+	if (!Payload) return false;
 
 	const bool bOk = UGameplayStatics::SaveGameToSlot(Payload, SaveSlotName, SaveUserIndex);
+
 	if (bOk)
 	{
 		bSaveDirty = false;
@@ -546,6 +540,7 @@ bool UInTheDarkGameInstance::WriteSaveToDisk()
 	{
 		UE_LOG(LogTemp, Error, TEXT("WriteSaveToDisk: failed for slot '%s'."), *SaveSlotName);
 	}
+
 	return bOk;
 }
 
@@ -556,6 +551,7 @@ void UInTheDarkGameInstance::WriteSaveToDiskAsync()
 	RequestSaveSnapshot();
 
 	UInTheDarkSaveGame* Payload = BuildPayload();
+
 	if (!Payload)
 	{
 		OnSaveWrittenAsync.Broadcast(false);
@@ -571,11 +567,13 @@ void UInTheDarkGameInstance::WriteSaveToDiskAsync()
 void UInTheDarkGameInstance::HandleAsyncSaveCompleted(const FString& Slot, const int32 UserIndex, bool bSuccess)
 {
 	bAsyncSaveInFlight = false;
+
 	if (bSuccess)
 	{
 		bSaveDirty = false;
 		OnSaveWritten.Broadcast();
 	}
+
 	OnSaveWrittenAsync.Broadcast(bSuccess);
 }
 
@@ -593,6 +591,7 @@ bool UInTheDarkGameInstance::LoadOrCreateSave()
 
 	USaveGame* Raw = UGameplayStatics::LoadGameFromSlot(SaveSlotName, SaveUserIndex);
 	UInTheDarkSaveGame* Loaded = Cast<UInTheDarkSaveGame>(Raw);
+
 	if (!Loaded)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LoadOrCreateSave: invalid payload in slot '%s'."), *SaveSlotName);
@@ -617,24 +616,24 @@ bool UInTheDarkGameInstance::LoadOrCreateSave()
 bool UInTheDarkGameInstance::DeleteSave()
 {
 	const bool bOk = UGameplayStatics::DeleteGameInSlot(SaveSlotName, SaveUserIndex);
+
 	if (bOk)
 	{
 		ResetCache();
 		bHasLoadedSave = false;
 		bSaveDirty = false;
 	}
+
 	return bOk;
 }
 
 void UInTheDarkGameInstance::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 {
 	if (!LoadedWorld) return;
+
 	if (DoesSaveSlotExist() && !IsMainMenuMap(LoadedWorld->GetMapName()))
-	{
 		SetLastMapName(LoadedWorld->GetMapName());
-	}
+
 	if (bAutosaveOnMapChange && bSaveDirty)
-	{
 		WriteSaveToDiskAsync();
-	}
 }
