@@ -118,6 +118,12 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World|Door")
 	bool IsDoorOpened(const FString& DoorID) const { return IsWorldActorMarked(FName("Door"), DoorID); }
 
+	UFUNCTION(BlueprintCallable, Category = "Save|World|ElementalGate")
+	void RegisterElementalGateOpened(const FString& GateID) { MarkWorldActor(FName("ElementalGate"), GateID); }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World|ElementalGate")
+	bool IsElementalGateOpened(const FString& GateID) const { return IsWorldActorMarked(FName("ElementalGate"), GateID); }
+
 	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
 	void UpdateElementProgression(const FSavedElementProgressionEntry& Entry);
 
