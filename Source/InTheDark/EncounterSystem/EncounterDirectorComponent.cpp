@@ -123,6 +123,7 @@ void UEncounterDirectorComponent::StartWave()
 		}
 	}
 
+	WarmUpCurrentWavePools(*Wave);
 	State = EEncounterState::WaveActive;
 
 	const ACombatArena* Arena = GetArena();
@@ -137,6 +138,26 @@ void UEncounterDirectorComponent::StartWave()
 		World->GetTimerManager().SetTimer(SpawnTimerHandle, this, &UEncounterDirectorComponent::SpawnNextInQueue, Wave->SecondsBetweenSpawns, true);
 
 	SpawnNextInQueue();
+}
+
+void UEncounterDirectorComponent::WarmUpCurrentWavePools(const FEncounterWave& Wave)
+{
+	UObjectPoolSubsystem* Pool = GetPool();
+	if (!Pool) return;
+
+	const AActor* Owner = GetOwner();
+	FTransform WarmUpTransform = Owner ? Owner->GetActorTransform() : FTransform::Identity;
+	WarmUpTransform.SetLocation(WarmUpTransform.GetLocation() + FVector(0.f, 0.f, -10000.f));
+
+	TSet<TSubclassOf<AActor>> WarmedClasses;
+
+	for (const FEnemySpawn& Spawn : Wave.Spawns)
+	{
+		if (!Spawn.Enemy || WarmedClasses.Contains(Spawn.Enemy)) continue;
+
+		Pool->WarmUpPool(this, Spawn.Enemy, WarmUpTransform);
+		WarmedClasses.Add(Spawn.Enemy);
+	}
 }
 
 void UEncounterDirectorComponent::SpawnNextInQueue()

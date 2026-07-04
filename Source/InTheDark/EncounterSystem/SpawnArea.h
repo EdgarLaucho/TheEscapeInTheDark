@@ -88,6 +88,7 @@ private:
 
 	void Activate();
 	void Deactivate();
+	void WarmUpEnemyPools();
 	void SetPlayerInside(bool bNewPlayerInside);
 	void RefreshPlayerInsideState();
 	bool IsPlayerInsideArea() const;

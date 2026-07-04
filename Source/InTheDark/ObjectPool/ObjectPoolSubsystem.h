@@ -17,6 +17,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Object Pool", meta = (WorldContext = "WorldContextObject"))
 	AActor* AcquireFromPool(UObject* WorldContextObject, TSubclassOf<AActor> ActorClass, const FTransform& SpawnTransform);
 
+	UFUNCTION(BlueprintCallable, Category = "Object Pool", meta = (WorldContext = "WorldContextObject"))
+	void WarmUpPool(UObject* WorldContextObject, TSubclassOf<AActor> ActorClass, const FTransform& SpawnTransform);
+
 	UFUNCTION(BlueprintCallable, Category = "Object Pool")
 	void ReleaseToPool(AActor* Actor);
 

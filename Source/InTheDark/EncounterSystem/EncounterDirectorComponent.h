@@ -52,6 +52,7 @@ private:
 	TSubclassOf<AActor> ResolveEnemyClass(const FEnemySpawn& Directive) const;
 	void BeginNextWave();
 	void StartWave();
+	void WarmUpCurrentWavePools(const FEncounterWave& Wave);
 	void SpawnNextInQueue();
 	ASpawnAnchor* ChooseFreeAnchor() const;
 	void TrackSpawnedEnemy(AActor* Enemy);
