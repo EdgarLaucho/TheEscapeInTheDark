@@ -26,6 +26,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Switch")
 	bool IsActivated() const { return bActivated; }
 
+	void RestoreActivatedState();
+
 	virtual void OnElementHit_Implementation(FName ElementName, AActor* HitInstigator) override;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Switch")
@@ -41,4 +43,6 @@ protected:
 private:
 	UPROPERTY(Transient)
 	bool bActivated = false;
+
+	void ApplyActivatedState();
 };

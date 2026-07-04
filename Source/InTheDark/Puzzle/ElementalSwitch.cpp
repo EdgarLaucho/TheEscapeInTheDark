@@ -43,7 +43,20 @@ void AElementalSwitch::OnElementHit_Implementation(FName ElementName, AActor* Hi
 	if (RequiredElement.IsNone() || NormalizeElementName(ElementName) != RequiredElement) return;
 
 	bActivated = true;
+	ApplyActivatedState();
+	OnSwitchActivated();
 
+	if (OwningDoor) OwningDoor->NotifySwitchActivated();
+}
+
+void AElementalSwitch::RestoreActivatedState()
+{
+	bActivated = true;
+	ApplyActivatedState();
+}
+
+void AElementalSwitch::ApplyActivatedState()
+{
 	if (MeshComponent)
 	{
 		MeshComponent->SetVisibility(false, true);
@@ -53,8 +66,4 @@ void AElementalSwitch::OnElementHit_Implementation(FName ElementName, AActor* Hi
 	{
 		HitBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
-
-	OnSwitchActivated();
-
-	if (OwningDoor) OwningDoor->NotifySwitchActivated();
 }

@@ -5,8 +5,6 @@
 #include "EncounterSystem/SpawnAnchor.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Components/BoxComponent.h"
-#include "Components/CapsuleComponent.h"
-#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -316,7 +314,8 @@ void UEncounterDirectorComponent::HandleEncounterCleared()
 void UEncounterDirectorComponent::HandleEnemyLeftContainment(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	if (State != EEncounterState::WaveActive) return;
-	if (IsEnemyPendingRemoval(OtherActor)) return;
+	if (!IsValid(OtherActor) || OtherActor->IsActorBeingDestroyed() || OtherActor->IsHidden() || !OtherActor->GetActorEnableCollision()) return;
+	if (OtherComp && OtherComp->GetCollisionEnabled() == ECollisionEnabled::NoCollision) return;
 
 	const bool bIsTrackedEnemy = AliveEnemies.ContainsByPredicate([OtherActor](const TWeakObjectPtr<AActor>& E)
 	{
@@ -329,7 +328,6 @@ void UEncounterDirectorComponent::HandleEnemyLeftContainment(UPrimitiveComponent
 void UEncounterDirectorComponent::ReturnEnemyToAnchor(AActor* Enemy)
 {
 	if (!Enemy) return;
-	if (IsEnemyPendingRemoval(Enemy)) return;
 
 	const ASpawnAnchor* Anchor = ChooseFreeAnchor();
 	if (!Anchor)
@@ -346,27 +344,6 @@ void UEncounterDirectorComponent::ReturnEnemyToAnchor(AActor* Enemy)
 			Movement->StopMovementImmediately();
 	}
 
-	Enemy->SetActorLocation(Anchor->GetActorLocation(), false, nullptr, ETeleportType::TeleportPhysics);
-}
-
-bool UEncounterDirectorComponent::IsEnemyPendingRemoval(const AActor* Enemy) const
-{
-	if (!IsValid(Enemy)) return true;
-	if (Enemy->IsHidden() || !Enemy->GetActorEnableCollision()) return true;
-
-	if (const ACharacter* Character = Cast<ACharacter>(Enemy))
-	{
-		const UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
-		if (Movement && Movement->MovementMode == MOVE_None) return true;
-
-		const UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
-		if (Capsule && Capsule->GetCollisionEnabled() == ECollisionEnabled::NoCollision) return true;
-
-		const USkeletalMeshComponent* Mesh = Character->GetMesh();
-		if (Mesh && Mesh->IsSimulatingPhysics()) return true;
-
-		if (!Character->GetController()) return true;
-	}
-
-	return false;
+	const FTransform ReturnTransform = ASpawnAnchor::BuildGroundedSpawnTransform(GetWorld(), Enemy->GetClass(), Anchor->GetActorTransform(), Anchor);
+	Enemy->SetActorLocation(ReturnTransform.GetLocation(), false, nullptr, ETeleportType::TeleportPhysics);
 }
