@@ -31,6 +31,14 @@ void AElementalGateDoor::BeginPlay()
 	}
 
 	ApplyOpenState();
+
+	if (bOpen)
+	{
+		for (const TObjectPtr<AElementalSwitch>& Switch : Switches)
+		{
+			if (Switch) Switch->RestoreActivatedState();
+		}
+	}
 }
 
 void AElementalGateDoor::NotifySwitchActivated()
@@ -57,7 +65,7 @@ void AElementalGateDoor::Open()
 	if (bOpen) return;
 
 	bOpen = true;
-	ApplyOpenState();
+	SetGateCollisionEnabled(false);
 	OnDoorOpened();
 
 	if (!DoorId.IsNone())
