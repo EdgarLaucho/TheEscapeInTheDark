@@ -4,6 +4,7 @@
 APlayerTutorialManager::APlayerTutorialManager()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 }
 
 void APlayerTutorialManager::BeginPlay()
@@ -24,6 +25,7 @@ void APlayerTutorialManager::BeginPlay()
 	}
 
 	Super::BeginPlay();
+	UpdateTutorialTickEnabled();
 }
 
 void APlayerTutorialManager::Tick(float DeltaTime)
@@ -85,6 +87,7 @@ void APlayerTutorialManager::ShowStep()
 	}
 
 	AutoAdvanceTimer = 0.0f;
+	UpdateTutorialTickEnabled();
 	OnTutorialStepChanged.Broadcast(CurrentStep, TutorialSteps[CurrentStep]);
 }
 
@@ -236,6 +239,7 @@ void APlayerTutorialManager::FinishTutorial()
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
+	UpdateTutorialTickEnabled();
 
 	if (UInTheDarkGameInstance* GI = UInTheDarkGameInstance::Get(this))
 	{
@@ -258,6 +262,7 @@ void APlayerTutorialManager::ApplyLoadedTutorialState(int32 LoadedStep, bool bLo
 
 	if (bTutorialFinished)
 	{
+		UpdateTutorialTickEnabled();
 		OnTutorialFinished.Broadcast();
 		return;
 	}
@@ -280,4 +285,13 @@ void APlayerTutorialManager::InitializeTutorialInputDevice(bool bInitialUsingGam
 	{
 		ShowStep();
 	}
+}
+
+void APlayerTutorialManager::UpdateTutorialTickEnabled()
+{
+	const bool bShouldTick = !bTutorialFinished
+		&& IsValidCurrentStep()
+		&& TutorialSteps[CurrentStep].bAutoAdvanceAfterShow;
+
+	SetActorTickEnabled(bShouldTick);
 }

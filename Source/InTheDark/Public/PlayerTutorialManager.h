@@ -167,4 +167,5 @@ private:
 
 	bool IsValidCurrentStep() const;
 	void FinishTutorial();
+	void UpdateTutorialTickEnabled();
 };
