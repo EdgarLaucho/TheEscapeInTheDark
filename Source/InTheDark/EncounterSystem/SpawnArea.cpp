@@ -62,6 +62,7 @@ void ASpawnArea::Activate()
 {
 	GetWorld()->GetTimerManager().ClearTimer(DespawnCheckHandle);
 
+	WarmUpEnemyPools();
 	ApplyLeashStateToActiveEnemies();
 
 	GetWorld()->GetTimerManager().SetTimer(SpawnTimerHandle, this, &ASpawnArea::TrySpawn, Rules.SpawnInterval, true, Rules.InitialSpawnDelay);
@@ -76,6 +77,24 @@ void ASpawnArea::Deactivate()
 	ApplyLeashStateToActiveEnemies();
 
 	if (!ActiveEnemies.IsEmpty()) GetWorld()->GetTimerManager().SetTimer(DespawnCheckHandle, this, &ASpawnArea::CheckDespawnOnLeave, 0.5f, true);
+}
+
+void ASpawnArea::WarmUpEnemyPools()
+{
+	UObjectPoolSubsystem* Pool = GetPool();
+	if (!Pool) return;
+
+	TSet<TSubclassOf<AActor>> WarmedClasses;
+
+	for (const FSpawnAreaEntry& Entry : EnemyEntries)
+	{
+		if (!Entry.EnemyClass || WarmedClasses.Contains(Entry.EnemyClass)) continue;
+
+		FTransform WarmUpTransform = GetActorTransform();
+		WarmUpTransform.SetLocation(GetActorLocation() + FVector(0.f, 0.f, -10000.f));
+		Pool->WarmUpPool(this, Entry.EnemyClass, WarmUpTransform);
+		WarmedClasses.Add(Entry.EnemyClass);
+	}
 }
 
 void ASpawnArea::SetPlayerInside(bool bNewPlayerInside)

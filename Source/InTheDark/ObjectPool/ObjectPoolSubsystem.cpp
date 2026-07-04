@@ -103,6 +103,25 @@ AActor* UObjectPoolSubsystem::AcquireFromPool(UObject* WorldContextObject, TSubc
 	return nullptr;
 }
 
+void UObjectPoolSubsystem::WarmUpPool(UObject* WorldContextObject, TSubclassOf<AActor> ActorClass, const FTransform& SpawnTransform)
+{
+	if (!ActorClass) return;
+
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World) return;
+
+	FObjectPool& Pool = EnsurePool(ActorClass);
+	CleanupPool(Pool);
+
+	if (!Pool.InactiveActors.IsEmpty() || !Pool.ActiveActors.IsEmpty()) return;
+
+	AActor* Actor = CreatePooledActor(World, ActorClass, SpawnTransform);
+	if (!Actor) return;
+
+	DeactivateActor(Actor);
+	Pool.InactiveActors.Add(Actor);
+}
+
 void UObjectPoolSubsystem::ReleaseToPool(AActor* Actor)
 {
 	if (!IsValid(Actor)) return;
