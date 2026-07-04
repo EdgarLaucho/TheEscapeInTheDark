@@ -21,7 +21,7 @@ FTransform ASpawnAnchor::BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<
 	if (FloorOffset <= 0.f) return Result;
 
 	FVector Location = Result.GetLocation();
-	const FVector TraceStart = Location + FVector(0.f, 0.f, FMath::Max(500.f, FloorOffset + 200.f));
+	const FVector TraceStart = Location + FVector(0.f, 0.f, 10.f);
 	const FVector TraceEnd = Location - FVector(0.f, 0.f, 5000.f);
 
 	FHitResult Hit;
@@ -93,29 +93,7 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 
 	LastSpawnTimeSeconds = World->GetTimeSeconds();
 
-	FTransform SpawnTransform = GetActorTransform();
-	const AActor* ClassDefault = Cast<AActor>(EnemyClass->GetDefaultObject());
-	SpawnTransform.SetScale3D(ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector);
-
-	const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
-	const float FloorOffset = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
-
-	if (FloorOffset > 0.f)
-	{
-		FVector Location = SpawnTransform.GetLocation();
-		const FVector TraceStart = Location + FVector(0.f, 0.f, 100.f);
-		const FVector TraceEnd = Location - FVector(0.f, 0.f, 350.f);
-
-		FHitResult Hit;
-		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterAnchorGroundTrace), false);
-		QueryParams.AddIgnoredActor(this);
-
-		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
-		{
-			Location.Z = Hit.ImpactPoint.Z + FloorOffset + 2.f;
-			SpawnTransform.SetLocation(Location);
-		}
-	}
+	FTransform SpawnTransform = BuildGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
 
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
 	{
