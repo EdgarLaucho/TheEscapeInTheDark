@@ -2,6 +2,7 @@
 #include "Components/BillboardComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
@@ -16,7 +17,7 @@ FTransform ASpawnAnchor::BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<
 	if (!World || !EnemyClass) return Result;
 
 	const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
-	const float FloorOffset = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
+	const float FloorOffset = Capsule ? Capsule->GetUnscaledCapsuleHalfHeight() * Capsule->GetRelativeScale3D().Z : 0.f;
 
 	if (FloorOffset <= 0.f) return Result;
 
@@ -93,7 +94,18 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 
 	LastSpawnTimeSeconds = World->GetTimeSeconds();
 
-	FTransform SpawnTransform = BuildGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
+	FTransform SpawnTransform = GetActorTransform();
+	const AActor* ClassDefault = Cast<AActor>(EnemyClass->GetDefaultObject());
+	SpawnTransform.SetScale3D(ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector);
+
+	const USkeletalMeshComponent* MeshComp = ClassDefault ? ClassDefault->FindComponentByClass<USkeletalMeshComponent>() : nullptr;
+
+	if (MeshComp)
+	{
+		const FVector AnchorLocation = GetActorLocation();
+		const FVector MeshPivotOffset = SpawnTransform.TransformVector(MeshComp->GetRelativeLocation());
+		SpawnTransform.SetLocation(AnchorLocation - MeshPivotOffset);
+	}
 
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
 	{
