@@ -40,6 +40,10 @@
 		{
 			"Name": "CQTestEnhancedInput",
 			"Enabled": true
+		},
+		{
+			"Name": "SequencerSubtitles",
+			"Enabled": true
 		}
 	]
 }
