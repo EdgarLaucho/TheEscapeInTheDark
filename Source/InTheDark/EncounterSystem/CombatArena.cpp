@@ -4,6 +4,7 @@
 #include "EncounterSystem/EncounterGate.h"
 #include "EncounterSystem/SpawnAnchor.h"
 #include "SaveSystem/InTheDarkGameInstance.h"
+#include "AI/PartnerStateInterface.h"
 
 #include "Components/BoxComponent.h"
 #include "Engine/World.h"
@@ -89,6 +90,20 @@ void ACombatArena::RequestStart()
 	LockEntryGates();
 	Director->StartEncounter();
 	EnsureCompanionInsideEncounter();
+
+	if (CompanionCheckInterval > 0.f)
+		GetWorldTimerManager().SetTimer(CompanionCheckTimerHandle, this, &ACombatArena::CheckCompanionDistance, CompanionCheckInterval, true);
+}
+
+void ACombatArena::CheckCompanionDistance()
+{
+	if (!Director || !Director->IsEncounterActive())
+	{
+		GetWorldTimerManager().ClearTimer(CompanionCheckTimerHandle);
+		return;
+	}
+
+	EnsureCompanionInsideEncounter();
 }
 
 void ACombatArena::EnsureCompanionInsideEncounter(AActor* PlayerOverride)
@@ -118,6 +133,8 @@ void ACombatArena::EnsureCompanionInsideEncounter(AActor* PlayerOverride)
 
 void ACombatArena::NotifyEncounterCleared()
 {
+	GetWorldTimerManager().ClearTimer(CompanionCheckTimerHandle);
+
 	if (bUnlockEntryGatesOnClear) UnlockEntryGates();
 
 	UnlockExitGates();
@@ -234,6 +251,7 @@ FTransform ACombatArena::BuildCompanionEncounterTransform(const AActor* PlayerAc
 		+ PlayerActor->GetActorForwardVector() * CompanionFallbackOffset.X
 		+ PlayerActor->GetActorRightVector() * CompanionFallbackOffset.Y
 		+ FVector(0.f, 0.f, CompanionFallbackOffset.Z));
+
 	CandidateLocations.Add(PlayerActor->GetActorLocation() - PlayerActor->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, CompanionFallbackOffset.Z));
 	CandidateLocations.Add(PlayerActor->GetActorLocation() + PlayerActor->GetActorRightVector() * 150.f + FVector(0.f, 0.f, CompanionFallbackOffset.Z));
 	CandidateLocations.Add(PlayerActor->GetActorLocation() - PlayerActor->GetActorRightVector() * 150.f + FVector(0.f, 0.f, CompanionFallbackOffset.Z));
@@ -300,15 +318,6 @@ void ACombatArena::ReactivateCompanionAfterTeleport(AActor* CompanionActor) cons
 		}
 	}
 
-	if (UFunction* SetStateFunction = CompanionActor->FindFunction(TEXT("SetPartnerState")))
-	{
-		struct FSetPartnerStateParams
-		{
-			uint8 NewState = 0;
-		};
-
-		FSetPartnerStateParams Params;
-		Params.NewState = CompanionEncounterStateValue;
-		CompanionActor->ProcessEvent(SetStateFunction, &Params);
-	}
+	if (CompanionActor->GetClass()->ImplementsInterface(UPartnerStateInterface::StaticClass()))
+		IPartnerStateInterface::Execute_ApplyPartnerState(CompanionActor, CompanionEncounterStateValue);
 }

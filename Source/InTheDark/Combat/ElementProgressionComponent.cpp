@@ -180,5 +180,3 @@ void UElementProgressionComponent::RestoreFromSave(const TArray<FSavedElementPro
 		OnElementProgressChanged.Broadcast(Saved.ElementName, *Data);
 	}
 }
-
-
