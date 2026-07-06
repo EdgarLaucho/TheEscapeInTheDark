@@ -3,11 +3,22 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Misc/CoreDelegates.h"
+#include "TimerManager.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 #include "GameFramework/PlayerStart.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "NavigationSystem.h"
 #include "EngineUtils.h"
+#include "UObject/UnrealType.h"
 
-UInTheDarkGameInstance::UInTheDarkGameInstance() = default;
+UInTheDarkGameInstance::UInTheDarkGameInstance()
+{
+	CompanionClass = TSoftClassPtr<AActor>(FSoftObjectPath(TEXT("/Game/AI/Partner/Blueprints/BP_PartnerAICharacter.BP_PartnerAICharacter_C")));
+	DefaultFallbackMusic = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Level/Lvl/Sound/HouseMusic.HouseMusic")));
+}
 
 UInTheDarkGameInstance* UInTheDarkGameInstance::Get(const UObject* WorldContextObject)
 {
@@ -87,6 +98,7 @@ void UInTheDarkGameInstance::ResetCache()
 	CompanionPersonalityCache = FSavedCompanionPersonality();
 	CompanionStateCache = FSavedCompanionState();
 	TutorialStateCache = FSavedTutorialState();
+	MusicStateCache = FSavedMusicState();
 	WorldStateCache.Reset();
 	ClearedEncountersCache.Reset();
 	SeenDialoguesCache.Reset();
@@ -104,7 +116,9 @@ void UInTheDarkGameInstance::RequestSaveSnapshot()
 	if (bRequestingSaveSnapshot) return;
 	bRequestingSaveSnapshot = true;
 	CapturePlayerSnapshot();
+	CaptureMusicSnapshot();
 	OnSaveSnapshotRequested.Broadcast();
+	CaptureMusicSnapshot();
 	bRequestingSaveSnapshot = false;
 }
 
@@ -259,7 +273,7 @@ void UInTheDarkGameInstance::SaveAtCheckpoint(FName CheckpointID, const FSavedPl
 
 FTransform UInTheDarkGameInstance::GetSpawnTransform(UObject* WorldContextObject) const
 {
-	if (HasSavedTransform())
+	if (HasValidSavedPlayerTransform())
 		return PlayerStateCache.Transform;
 
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
@@ -378,6 +392,106 @@ void UInTheDarkGameInstance::UpdateTutorialState(int32 SavedStep, bool bFinished
 	bSaveDirty = true;
 }
 
+void UInTheDarkGameInstance::SetCurrentMusicZone(FName ZoneId, USoundBase* Music, float FadeTime)
+{
+	const FName MusicId = Music ? Music->GetFName() : NAME_None;
+	PlayMusicByAsset(Music, MusicId, ZoneId, FadeTime);
+}
+
+void UInTheDarkGameInstance::PlayMusicByAsset(USoundBase* Music, FName MusicId, FName ZoneId, float FadeTime)
+{
+	if (!Music) return;
+
+	const FString NewPath = FSoftObjectPath(Music).ToString();
+	const bool bSameMusic = MusicStateCache.bShouldBePlaying && MusicStateCache.MusicAssetPath == NewPath;
+
+	MusicStateCache.CurrentMusicId = MusicId.IsNone() ? Music->GetFName() : MusicId;
+	MusicStateCache.CurrentMusicZoneId = ZoneId;
+	MusicStateCache.MusicAssetPath = NewPath;
+	MusicStateCache.bShouldBePlaying = true;
+	bSaveDirty = true;
+
+	UAudioComponent* AudioComponent = GetPlayerMusicAudioComponent();
+	if (bSameMusic && AudioComponent && AudioComponent->IsPlaying())
+	{
+		SetPlayerControllerCurrentMusic(Music);
+		return;
+	}
+
+	ApplyMusicToAudioComponent(Music, FadeTime);
+}
+
+void UInTheDarkGameInstance::RestoreMusicFromSave(float FadeTime)
+{
+	if (!MusicStateCache.bShouldBePlaying)
+		return;
+
+	USoundBase* Music = nullptr;
+	if (!MusicStateCache.MusicAssetPath.IsEmpty())
+	{
+		Music = Cast<USoundBase>(FSoftObjectPath(MusicStateCache.MusicAssetPath).TryLoad());
+	}
+
+	if (!Music && !DefaultFallbackMusic.IsNull())
+	{
+		Music = DefaultFallbackMusic.LoadSynchronous();
+	}
+
+	if (!Music) return;
+
+	ApplyMusicToAudioComponent(Music, FadeTime);
+}
+
+void UInTheDarkGameInstance::StopMusic(float FadeTime, bool bRememberSilence)
+{
+	if (UAudioComponent* AudioComponent = GetPlayerMusicAudioComponent())
+	{
+		if (FadeTime > 0.f)
+			AudioComponent->FadeOut(FadeTime, 0.f);
+		else
+			AudioComponent->Stop();
+	}
+	else if (ActiveMusicComponent)
+	{
+		if (FadeTime > 0.f)
+			ActiveMusicComponent->FadeOut(FadeTime, 0.f);
+		else
+			ActiveMusicComponent->Stop();
+	}
+
+	if (bRememberSilence)
+	{
+		MusicStateCache.bShouldBePlaying = false;
+		bSaveDirty = true;
+	}
+}
+
+void UInTheDarkGameInstance::CaptureMusicSnapshot()
+{
+	if (USoundBase* CurrentMusic = GetPlayerControllerCurrentMusic())
+	{
+		MusicStateCache.CurrentMusicId = CurrentMusic->GetFName();
+		if (MusicStateCache.CurrentMusicZoneId.IsNone())
+			MusicStateCache.CurrentMusicZoneId = MusicStateCache.CurrentMusicId;
+		MusicStateCache.MusicAssetPath = FSoftObjectPath(CurrentMusic).ToString();
+		MusicStateCache.bShouldBePlaying = true;
+		bSaveDirty = true;
+		return;
+	}
+
+	UAudioComponent* AudioComponent = GetPlayerMusicAudioComponent();
+	USoundBase* Sound = AudioComponent ? AudioComponent->Sound : nullptr;
+	if (Sound)
+	{
+		MusicStateCache.CurrentMusicId = Sound->GetFName();
+		if (MusicStateCache.CurrentMusicZoneId.IsNone())
+			MusicStateCache.CurrentMusicZoneId = MusicStateCache.CurrentMusicId;
+		MusicStateCache.MusicAssetPath = FSoftObjectPath(Sound).ToString();
+		MusicStateCache.bShouldBePlaying = AudioComponent->IsPlaying();
+		bSaveDirty = true;
+	}
+}
+
 bool UInTheDarkGameInstance::IsDialogueSeen(FName DialogueID) const
 {
 	return !DialogueID.IsNone() && SeenDialoguesCache.Contains(DialogueID);
@@ -454,6 +568,7 @@ void UInTheDarkGameInstance::CopyCacheToPayload(UInTheDarkSaveGame& Payload) con
 	Payload.CompanionPersonality = CompanionPersonalityCache;
 	Payload.CompanionState = CompanionStateCache;
 	Payload.TutorialState = TutorialStateCache;
+	Payload.MusicState = MusicStateCache;
 	Payload.LastMapName = CachedLastMapName;
 
 	Payload.WorldState.Reset();
@@ -476,6 +591,7 @@ void UInTheDarkGameInstance::CopyPayloadToCache(const UInTheDarkSaveGame& Payloa
 	CompanionPersonalityCache = Payload.CompanionPersonality;
 	CompanionStateCache = Payload.CompanionState;
 	TutorialStateCache = Payload.TutorialState;
+	MusicStateCache = Payload.MusicState;
 	CachedLastMapName = Payload.LastMapName;
 
 	WorldStateCache.Reset();
@@ -632,8 +748,232 @@ void UInTheDarkGameInstance::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 	if (!LoadedWorld) return;
 
 	if (DoesSaveSlotExist() && !IsMainMenuMap(LoadedWorld->GetMapName()))
+	{
 		SetLastMapName(LoadedWorld->GetMapName());
+		PendingLoadRestoreAttempts = 0;
+		FTimerDelegate RestoreDelegate = FTimerDelegate::CreateUObject(this, &UInTheDarkGameInstance::RestoreLoadedWorldState, LoadedWorld);
+		LoadedWorld->GetTimerManager().SetTimerForNextTick(RestoreDelegate);
+		return;
+	}
 
 	if (bAutosaveOnMapChange && bSaveDirty)
 		WriteSaveToDiskAsync();
+}
+
+bool UInTheDarkGameInstance::HasValidSavedPlayerTransform() const
+{
+	if (!PlayerStateCache.bHasSavedTransform) return false;
+
+	const FVector Location = PlayerStateCache.Transform.GetLocation();
+	const FQuat Rotation = PlayerStateCache.Transform.GetRotation();
+	const FVector Scale = PlayerStateCache.Transform.GetScale3D();
+
+	return Location.ContainsNaN() == false
+		&& Rotation.ContainsNaN() == false
+		&& Scale.ContainsNaN() == false;
+}
+
+void UInTheDarkGameInstance::RestoreLoadedWorldState(UWorld* LoadedWorld)
+{
+	if (!LoadedWorld || IsMainMenuMap(LoadedWorld->GetMapName())) return;
+
+	APlayerController* PC = LoadedWorld->GetFirstPlayerController();
+	APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;
+
+	if (!PlayerPawn && PendingLoadRestoreAttempts < 20)
+	{
+		++PendingLoadRestoreAttempts;
+		FTimerHandle RetryHandle;
+		FTimerDelegate RetryDelegate = FTimerDelegate::CreateUObject(this, &UInTheDarkGameInstance::RestoreLoadedWorldState, LoadedWorld);
+		LoadedWorld->GetTimerManager().SetTimer(RetryHandle, RetryDelegate, 0.1f, false);
+		return;
+	}
+
+	if (PlayerPawn && HasValidSavedPlayerTransform())
+	{
+		PlayerPawn->SetActorTransform(PlayerStateCache.Transform, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	if (PlayerPawn && CompanionStateCache.bHasAwoken)
+	{
+		if (AActor* CompanionActor = FindCompanionActor(LoadedWorld))
+		{
+			const FTransform CompanionTransform = BuildCompanionLoadTransform(LoadedWorld, PlayerPawn);
+			CompanionActor->SetActorTransform(CompanionTransform, false, nullptr, ETeleportType::TeleportPhysics);
+			ReactivateLoadedCompanion(CompanionActor);
+		}
+	}
+
+	RestoreMusicFromSave(0.25f);
+
+	if (bAutosaveOnMapChange && bSaveDirty)
+		WriteSaveToDiskAsync();
+}
+
+UAudioComponent* UInTheDarkGameInstance::GetPlayerMusicAudioComponent() const
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	if (!PC) return nullptr;
+
+	if (FObjectProperty* Property = FindFProperty<FObjectProperty>(PC->GetClass(), TEXT("MusicAudio")))
+	{
+		if (UAudioComponent* AudioComponent = Cast<UAudioComponent>(Property->GetObjectPropertyValue_InContainer(PC)))
+			return AudioComponent;
+	}
+
+	return PC->FindComponentByClass<UAudioComponent>();
+}
+
+USoundBase* UInTheDarkGameInstance::GetPlayerControllerCurrentMusic() const
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	if (!PC) return nullptr;
+
+	if (FObjectProperty* Property = FindFProperty<FObjectProperty>(PC->GetClass(), TEXT("CurrentMusic")))
+	{
+		return Cast<USoundBase>(Property->GetObjectPropertyValue_InContainer(PC));
+	}
+
+	return nullptr;
+}
+
+void UInTheDarkGameInstance::SetPlayerControllerCurrentMusic(USoundBase* Music) const
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	if (!PC) return;
+
+	if (FObjectProperty* Property = FindFProperty<FObjectProperty>(PC->GetClass(), TEXT("CurrentMusic")))
+	{
+		Property->SetObjectPropertyValue_InContainer(PC, Music);
+	}
+}
+
+void UInTheDarkGameInstance::ApplyMusicToAudioComponent(USoundBase* Music, float FadeTime)
+{
+	if (!Music) return;
+
+	if (UAudioComponent* AudioComponent = GetPlayerMusicAudioComponent())
+	{
+		if (AudioComponent->Sound == Music && AudioComponent->IsPlaying())
+		{
+			SetPlayerControllerCurrentMusic(Music);
+			return;
+		}
+
+		AudioComponent->SetSound(Music);
+		SetPlayerControllerCurrentMusic(Music);
+
+		if (FadeTime > 0.f)
+			AudioComponent->FadeIn(FadeTime);
+		else
+			AudioComponent->Play();
+
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	if (ActiveMusicComponent && ActiveMusicComponent->IsPlaying())
+	{
+		ActiveMusicComponent->Stop();
+	}
+
+	ActiveMusicComponent = UGameplayStatics::SpawnSound2D(World, Music, 1.f, 1.f, 0.f, nullptr, true, false);
+	if (ActiveMusicComponent && FadeTime > 0.f)
+	{
+		ActiveMusicComponent->FadeIn(FadeTime);
+	}
+}
+
+AActor* UInTheDarkGameInstance::FindCompanionActor(UWorld* World) const
+{
+	if (!World) return nullptr;
+
+	UClass* LoadedCompanionClass = CompanionClass.LoadSynchronous();
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor)) continue;
+
+		if (LoadedCompanionClass && Actor->IsA(LoadedCompanionClass))
+			return Actor;
+
+		if (!LoadedCompanionClass && Actor->GetClass()->GetName().Contains(TEXT("PartnerAICharacter")))
+			return Actor;
+	}
+
+	return nullptr;
+}
+
+FTransform UInTheDarkGameInstance::BuildCompanionLoadTransform(UWorld* World, const APawn* PlayerPawn) const
+{
+	if (!World || !PlayerPawn) return FTransform::Identity;
+
+	const FRotator PlayerRotation = PlayerPawn->GetActorRotation();
+	FVector DesiredLocation = PlayerPawn->GetActorLocation()
+		+ PlayerPawn->GetActorForwardVector() * CompanionLoadOffset.X
+		+ PlayerPawn->GetActorRightVector() * CompanionLoadOffset.Y
+		+ FVector(0.f, 0.f, CompanionLoadOffset.Z);
+
+	if (UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World))
+	{
+		FNavLocation ProjectedLocation;
+		if (NavSystem->ProjectPointToNavigation(DesiredLocation, ProjectedLocation, FVector(300.f, 300.f, 500.f)))
+		{
+			DesiredLocation = ProjectedLocation.Location;
+		}
+	}
+
+	FHitResult Hit;
+	const FVector TraceStart = DesiredLocation + FVector(0.f, 0.f, 300.f);
+	const FVector TraceEnd = DesiredLocation - FVector(0.f, 0.f, 1200.f);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CompanionLoadGroundTrace), false, PlayerPawn);
+
+	if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+	{
+		DesiredLocation = Hit.Location + FVector(0.f, 0.f, 5.f);
+	}
+
+	return FTransform(PlayerRotation, DesiredLocation, FVector::OneVector);
+}
+
+void UInTheDarkGameInstance::ReactivateLoadedCompanion(AActor* CompanionActor)
+{
+	if (!IsValid(CompanionActor)) return;
+
+	CompanionActor->SetActorHiddenInGame(false);
+	CompanionActor->SetActorEnableCollision(true);
+	CompanionActor->SetActorTickEnabled(true);
+
+	if (APawn* CompanionPawn = Cast<APawn>(CompanionActor))
+	{
+		if (!CompanionPawn->GetController())
+			CompanionPawn->SpawnDefaultController();
+	}
+
+	if (ACharacter* CompanionCharacter = Cast<ACharacter>(CompanionActor))
+	{
+		if (UCharacterMovementComponent* Movement = CompanionCharacter->GetCharacterMovement())
+		{
+			Movement->SetMovementMode(MOVE_Walking);
+		}
+	}
+
+	if (UFunction* SetStateFunction = CompanionActor->FindFunction(TEXT("SetPartnerState")))
+	{
+		struct FSetPartnerStateParams
+		{
+			uint8 NewState = 0;
+		};
+
+		FSetPartnerStateParams Params;
+		const uint8 SavedState = CompanionStateCache.CurrentStateValue;
+		Params.NewState = (SavedState == 0 || SavedState == 1) ? CompanionLoadedStateValue : SavedState;
+		CompanionActor->ProcessEvent(SetStateFunction, &Params);
+	}
 }

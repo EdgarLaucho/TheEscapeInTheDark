@@ -75,6 +75,11 @@ void UEncounterDirectorComponent::StartEncounter()
 	BeginNextWave();
 }
 
+bool UEncounterDirectorComponent::IsEncounterActive() const
+{
+	return State == EEncounterState::WaveDelay || State == EEncounterState::WaveActive;
+}
+
 void UEncounterDirectorComponent::BeginNextWave()
 {
 	const UEncounterConfig* Cfg = GetConfig();

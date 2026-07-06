@@ -28,6 +28,7 @@ class INTHEDARK_API UEncounterDirectorComponent : public UActorComponent
 
 public:
 	void StartEncounter();
+	bool IsEncounterActive() const;
 
 private:
 	UPROPERTY(Transient)

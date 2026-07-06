@@ -50,6 +50,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Tutorial")
 	FSavedTutorialState TutorialState;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Music")
+	FSavedMusicState MusicState;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, SaveGame, Category = "Save|Dialogue")
 	TArray<FName> SeenDialogues;
 };

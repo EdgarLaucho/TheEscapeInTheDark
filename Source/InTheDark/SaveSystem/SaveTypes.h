@@ -103,6 +103,24 @@ struct INTHEDARK_API FSavedTutorialState
 };
 
 USTRUCT(BlueprintType)
+struct INTHEDARK_API FSavedMusicState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Music")
+	FName CurrentMusicId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Music")
+	FName CurrentMusicZoneId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Music")
+	FString MusicAssetPath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Music")
+	bool bShouldBePlaying = false;
+};
+
+USTRUCT(BlueprintType)
 struct INTHEDARK_API FSaveSlotInfo
 {
 	GENERATED_BODY()

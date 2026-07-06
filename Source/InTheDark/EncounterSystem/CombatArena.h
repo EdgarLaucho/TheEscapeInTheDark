@@ -2,8 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "UObject/SoftObjectPtr.h"
 #include "CombatArena.generated.h"
 
+class APawn;
 class UBoxComponent;
 class UEncounterConfig;
 class UEncounterDirectorComponent;
@@ -42,6 +44,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Encounter|Authoring")
 	bool bSkipIfAlreadyCleared = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Encounter|Companion")
+	TSoftClassPtr<AActor> CompanionClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Encounter|Companion")
+	FVector CompanionFallbackOffset = FVector(-150.f, 120.f, 20.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Encounter|Companion")
+	uint8 CompanionEncounterStateValue = 0;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Encounter|Components")
 	TObjectPtr<USceneComponent> Root;
 
@@ -56,6 +67,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Encounter")
 	void RequestStart();
+
+	UFUNCTION(BlueprintCallable, Category = "Encounter|Companion")
+	void EnsureCompanionInsideEncounter(AActor* PlayerOverride = nullptr);
 
 	void NotifyEncounterCleared();
 
@@ -73,4 +87,9 @@ private:
 	void UnlockEntryGates();
 	void UnlockExitGates();
 	void UnlockGatesForClearedState();
+	AActor* FindCompanionActor() const;
+	bool IsInsideContainmentVolume(const FVector& Location) const;
+	FVector ClampLocationToContainmentVolume(const FVector& Location) const;
+	FTransform BuildCompanionEncounterTransform(const AActor* PlayerActor) const;
+	void ReactivateCompanionAfterTeleport(AActor* CompanionActor) const;
 };
