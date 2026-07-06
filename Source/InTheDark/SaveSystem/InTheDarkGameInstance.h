@@ -38,7 +38,6 @@ public:
 	int32 MaxSlots = 3;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
-	//FName DefaultGameLevelName = TEXT("Lvl_EscapeRouteFromTheDarkness");
 	FName DefaultGameLevelName = TEXT("DesertTest");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
