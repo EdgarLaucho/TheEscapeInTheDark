@@ -1,4 +1,5 @@
 #include "EncounterSystem/EncounterGate.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 
 AEncounterGate::AEncounterGate()
@@ -19,43 +20,60 @@ AEncounterGate::AEncounterGate()
 void AEncounterGate::BeginPlay()
 {
 	Super::BeginPlay();
+	ClosedRelativeLocation = MeshComponent ? MeshComponent->GetRelativeLocation() : FVector::ZeroVector;
 	bLocked = bStartLocked;
 	ApplyLockState();
 }
 
 void AEncounterGate::Lock()
 {
-	if (bLocked) { return; }
+	if (bLocked) return;
+
 	bLocked = true;
-	ApplyLockState();
+	SetGateCollisionEnabled(true);
 	OnGateLocked();
 }
 
 void AEncounterGate::Unlock()
 {
-	if (!bLocked) { return; }
+	if (!bLocked) return;
+
 	bLocked = false;
-	if (MeshComponent)
-	{
-		MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	}
+	SetGateCollisionEnabled(false);
 	OnGateUnlocked();
 }
 
-void AEncounterGate::FinishUnlock()
+void AEncounterGate::SetLockedInstant(bool bNewLocked)
 {
-	if (MeshComponent)
-	{
-		MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		MeshComponent->SetVisibility(false, true);
-	}
+	bLocked = bNewLocked;
+	ApplyLockState();
 }
 
 void AEncounterGate::ApplyLockState()
 {
+	SetGateCollisionEnabled(bLocked);
+	SnapGateToState(bLocked);
+}
+
+void AEncounterGate::SnapGateToState(bool bClosed)
+{
 	if (MeshComponent)
+		MeshComponent->SetRelativeLocation(bClosed ? ClosedRelativeLocation : GetOpenRelativeLocation());
+}
+
+void AEncounterGate::SetGateCollisionEnabled(bool bEnabled)
+{
+	TInlineComponentArray<UPrimitiveComponent*> PrimitiveComponents(this);
+
+	for (UPrimitiveComponent* Primitive : PrimitiveComponents)
 	{
-		MeshComponent->SetCollisionEnabled(bLocked ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
-		MeshComponent->SetVisibility(bLocked, true);
+		if (!Primitive) continue;
+
+		Primitive->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 	}
+}
+
+FVector AEncounterGate::GetOpenRelativeLocation() const
+{
+	return ClosedRelativeLocation + FVector(0.f, 0.f, -SinkDepthOffset);
 }

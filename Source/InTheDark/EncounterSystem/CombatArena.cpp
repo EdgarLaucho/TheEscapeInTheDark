@@ -4,13 +4,17 @@
 #include "EncounterSystem/EncounterGate.h"
 #include "EncounterSystem/SpawnAnchor.h"
 #include "SaveSystem/InTheDarkGameInstance.h"
-#include "ObjectPool/ObjectPoolSubsystem.h"
+#include "AI/PartnerStateInterface.h"
+
 #include "Components/BoxComponent.h"
-#include "EngineUtils.h"
 #include "Engine/World.h"
-#include "Engine/Engine.h"
+#include "EngineUtils.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "NavigationSystem.h"
 
 ACombatArena::ACombatArena()
 {
@@ -27,10 +31,16 @@ ACombatArena::ACombatArena()
 	TriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	TriggerVolume->SetGenerateOverlapEvents(true);
 
-	RewardAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("RewardAnchor"));
-	RewardAnchor->SetupAttachment(Root);
+	ContainmentVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("ContainmentVolume"));
+	ContainmentVolume->SetupAttachment(Root);
+	ContainmentVolume->SetBoxExtent(FVector(1500.f, 1500.f, 500.f));
+	ContainmentVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	ContainmentVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+	ContainmentVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	ContainmentVolume->SetGenerateOverlapEvents(true);
 
 	Director = CreateDefaultSubobject<UEncounterDirectorComponent>(TEXT("Director"));
+	CompanionClass = TSoftClassPtr<AActor>(FSoftObjectPath(TEXT("/Game/AI/Partner/Blueprints/BP_PartnerAICharacter.BP_PartnerAICharacter_C")));
 }
 
 void ACombatArena::BeginPlay()
@@ -39,8 +49,7 @@ void ACombatArena::BeginPlay()
 
 	if (bSkipIfAlreadyCleared && LookupIsAlreadyCleared())
 	{
-		UE_LOG(LogTemp, Log, TEXT("CombatArena '%s' (%s): already cleared; skipping."),
-			*GetName(), *EncounterId.ToString());
+		GetWorldTimerManager().SetTimerForNextTick(this, &ACombatArena::UnlockGatesForClearedState);
 		return;
 	}
 
@@ -48,120 +57,91 @@ void ACombatArena::BeginPlay()
 	{
 		TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &ACombatArena::HandleTriggerOverlap);
 	}
-
-	if (Director)
-	{
-		Director->OnEncounterStarted.AddDynamic(this, &ACombatArena::HandleEncounterStarted);
-		Director->OnEncounterCleared.AddDynamic(this, &ACombatArena::HandleEncounterCleared);
-		Director->OnEncounterFailed.AddDynamic(this, &ACombatArena::HandleEncounterFailed);
-	}
-
-	// Precalienta el pool con cada clase de enemigo de todas las oleadas.
-	if (Config)
-	{
-		if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
-		{
-			if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
-			{
-				TMap<UClass*, int32> MaxPerClass;
-				for (const FEncounterWave& Wave : Config->Waves)
-				{
-					for (const FEnemySpawn& Spawn : Wave.Spawns)
-					{
-						if (Spawn.Enemy.IsNull())
-						{
-							UE_LOG(LogTemp, Warning, TEXT("[CombatArena '%s'] Wave '%s' has a Spawn entry with NULL Enemy class"),
-								*GetName(), *Wave.WaveName.ToString());
-							continue;
-						}
-						UClass* Cls = Spawn.Enemy.LoadSynchronous();
-						if (!Cls)
-						{
-							UE_LOG(LogTemp, Warning, TEXT("[CombatArena '%s'] Wave '%s' failed to load enemy class from soft ptr '%s'"),
-								*GetName(), *Wave.WaveName.ToString(), *Spawn.Enemy.ToString());
-							continue;
-						}
-						int32& Best = MaxPerClass.FindOrAdd(Cls);
-						Best = FMath::Max(Best, Spawn.Count);
-						UE_LOG(LogTemp, Log, TEXT("[CombatArena '%s'] Wave '%s' declares %d x %s (running max=%d)"),
-							*GetName(), *Wave.WaveName.ToString(), Spawn.Count, *Cls->GetName(), Best);
-					}
-				}
-				for (const TPair<UClass*, int32>& Pair : MaxPerClass)
-				{
-					if (!Pool->HasPool(Pair.Key))
-					{
-						FPoolSettings Settings;
-						Settings.PrewarmCount = Pair.Value;
-						Settings.MaxPoolSize = Pair.Value * 3;
-						Settings.bAutoExpand = true;
-						Pool->RegisterPool(Pair.Key, Settings);
-					}
-					Pool->PrewarmPool(this, Pair.Key, Pair.Value);
-					UE_LOG(LogTemp, Log, TEXT("CombatArena '%s': prewarmed %d x %s"),
-						*GetName(), Pair.Value, *Pair.Key->GetName());
-				}
-			}
-		}
-	}
 }
 
 bool ACombatArena::LookupIsAlreadyCleared() const
 {
-	if (EncounterId.IsNone()) { return false; }
+	if (EncounterId.IsNone()) return false;
+
 	const UWorld* World = GetWorld();
-	if (!World) { return false; }
-	UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(World));
+	if (!World) return false;
+
+	const UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(World));
 	return GI && GI->IsEncounterCleared(EncounterId);
 }
 
-void ACombatArena::HandleTriggerOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*,
-	int32, bool, const FHitResult&)
+void ACombatArena::HandleTriggerOverlap(UPrimitiveComponent*, AActor* Other, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
-	if (bAlreadyStartedThisSession) { return; }
+	if (bAlreadyStartedThisSession) return;
+
 	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 	const AActor* PlayerPawn = PC ? PC->GetPawn() : nullptr;
-	if (!PlayerPawn || Other != PlayerPawn) { return; }
 
-	RequestStart();
+	if (Other == PlayerPawn) RequestStart();
 }
 
 void ACombatArena::RequestStart()
 {
-	if (bAlreadyStartedThisSession) { return; }
-	if (!Director || !Config)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ACombatArena::RequestStart: missing Director or Config on %s"),
-			*GetName());
-		return;
-	}
-	if (LookupIsAlreadyCleared()) { return; }
+	if (bAlreadyStartedThisSession || LookupIsAlreadyCleared()) return;
+
+	if (!Director || !Config) return;
 
 	bAlreadyStartedThisSession = true;
-	LockAllGates();
+	LockEntryGates();
 	Director->StartEncounter();
+	EnsureCompanionInsideEncounter();
+
+	if (CompanionCheckInterval > 0.f)
+		GetWorldTimerManager().SetTimer(CompanionCheckTimerHandle, this, &ACombatArena::CheckCompanionDistance, CompanionCheckInterval, true);
 }
 
-void ACombatArena::HandleEncounterStarted()
+void ACombatArena::CheckCompanionDistance()
 {
-	// Reservado para listeners de Blueprint / en el futuro para musica, efectos, dialogos, etc. Intencionalmente vacío en C++.
-}
-
-void ACombatArena::HandleEncounterCleared()
-{
-	UnlockAllGates();
-	SpawnReward();
-
-	if (GEngine)
+	if (!Director || !Director->IsEncounterActive())
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green,
-			FString::Printf(TEXT("ENCUENTRO COMPLETADO: %s"), *EncounterId.ToString()));
+		GetWorldTimerManager().ClearTimer(CompanionCheckTimerHandle);
+		return;
 	}
+
+	EnsureCompanionInsideEncounter();
+}
+
+void ACombatArena::EnsureCompanionInsideEncounter(AActor* PlayerOverride)
+{
+	if (!Director || !Director->IsEncounterActive()) return;
+
+	AActor* CompanionActor = FindCompanionActor();
+	if (!IsValid(CompanionActor)) return;
+
+	if (IsInsideContainmentVolume(CompanionActor->GetActorLocation())) return;
+
+	AActor* PlayerActor = PlayerOverride;
+
+	if (!PlayerActor)
+	{
+		const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+		PlayerActor = PC ? PC->GetPawn() : nullptr;
+	}
+
+	if (!IsValid(PlayerActor)) return;
+
+	const FTransform TargetTransform = BuildCompanionEncounterTransform(PlayerActor);
+
+	CompanionActor->SetActorTransform(TargetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	ReactivateCompanionAfterTeleport(CompanionActor);
+}
+
+void ACombatArena::NotifyEncounterCleared()
+{
+	GetWorldTimerManager().ClearTimer(CompanionCheckTimerHandle);
+
+	if (bUnlockEntryGatesOnClear) UnlockEntryGates();
+
+	UnlockExitGates();
 
 	if (Config && Config->bPersistCleared && !EncounterId.IsNone())
 	{
-		if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
-				UGameplayStatics::GetGameInstance(GetWorld())))
+		if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(GetWorld())))
 		{
 			GI->MarkEncounterCleared(EncounterId);
 			GI->WriteSaveToDisk();
@@ -169,70 +149,175 @@ void ACombatArena::HandleEncounterCleared()
 	}
 }
 
-void ACombatArena::HandleEncounterFailed()
+void ACombatArena::LockEntryGates()
 {
-	UnlockAllGates();
-	if (Config && Config->bReloadCheckpointOnFailure)
+	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
 	{
-		if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
-				UGameplayStatics::GetGameInstance(GetWorld())))
-		{
-			// De momento recarga de nivel. En futuro carga de checkpoint concreto.
-			GI->LoadOrCreateSave();
-			UGameplayStatics::OpenLevel(GetWorld(), FName(*UGameplayStatics::GetCurrentLevelName(GetWorld(), true)));
-		}
+		if (Gate) Gate->Lock();
 	}
 }
 
-void ACombatArena::SpawnReward()
+void ACombatArena::UnlockEntryGates()
 {
-	if (!Config) { return; }
-	if (Config->Reward.RewardClass.IsNull() || !RewardAnchor) { return; }
-
-	UClass* Cls = Config->Reward.RewardClass.LoadSynchronous();
-	if (!Cls) { return; }
-
-	FActorSpawnParameters P;
-	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	GetWorld()->SpawnActor<AActor>(Cls, RewardAnchor->GetComponentTransform(), P);
-}
-
-void ACombatArena::LockAllGates()
-{
-	for (const TObjectPtr<AEncounterGate>& G : Gates)
+	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
 	{
-		if (G) { G->Lock(); }
+		if (Gate) Gate->Unlock();
 	}
 }
 
-void ACombatArena::UnlockAllGates()
+void ACombatArena::UnlockExitGates()
 {
-	for (const TObjectPtr<AEncounterGate>& G : Gates)
+	for (const TObjectPtr<AEncounterGate>& Gate : ExitGates)
 	{
-		if (G) { G->Unlock(); }
+		if (Gate) Gate->Unlock();
 	}
 }
 
-int32 ACombatArena::AutoBindAnchorsByTag(FGameplayTagContainer Filter)
+void ACombatArena::UnlockGatesForClearedState()
 {
-	Anchors.Empty();
+	for (const TObjectPtr<AEncounterGate>& Gate : EntryGates)
+	{
+		if (Gate) Gate->SetLockedInstant(!bUnlockEntryGatesOnClear);
+	}
+
+	for (const TObjectPtr<AEncounterGate>& Gate : ExitGates)
+	{
+		if (Gate) Gate->SetLockedInstant(false);
+	}
+}
+
+AActor* ACombatArena::FindCompanionActor() const
+{
 	UWorld* World = GetWorld();
-	if (!World) { return 0; }
+	if (!World) return nullptr;
 
-	for (TActorIterator<ASpawnAnchor> It(World); It; ++It)
+	UClass* LoadedCompanionClass = CompanionClass.LoadSynchronous();
+
+	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		ASpawnAnchor* Anchor = *It;
-		if (!Anchor) { continue; }
+		AActor* Actor = *It;
+		if (!IsValid(Actor)) continue;
 
-		if (Filter.IsEmpty() || Anchor->AnchorTags.HasAny(Filter))
+		if (LoadedCompanionClass && Actor->IsA(LoadedCompanionClass))
+			return Actor;
+
+		if (!LoadedCompanionClass && Actor->GetClass()->GetName().Contains(TEXT("PartnerAICharacter")))
+			return Actor;
+	}
+
+	return nullptr;
+}
+
+bool ACombatArena::IsInsideContainmentVolume(const FVector& Location) const
+{
+	if (!ContainmentVolume) return true;
+
+	const FVector LocalLocation = ContainmentVolume->GetComponentTransform().InverseTransformPosition(Location);
+	const FVector Extent = ContainmentVolume->GetUnscaledBoxExtent();
+
+	return FMath::Abs(LocalLocation.X) <= Extent.X
+		&& FMath::Abs(LocalLocation.Y) <= Extent.Y
+		&& FMath::Abs(LocalLocation.Z) <= Extent.Z;
+}
+
+FVector ACombatArena::ClampLocationToContainmentVolume(const FVector& Location) const
+{
+	if (!ContainmentVolume) return Location;
+
+	const FTransform VolumeTransform = ContainmentVolume->GetComponentTransform();
+	const FVector Extent = ContainmentVolume->GetUnscaledBoxExtent();
+	FVector LocalLocation = VolumeTransform.InverseTransformPosition(Location);
+
+	const FVector Margin(75.f, 75.f, 25.f);
+	const FVector SafeExtent(
+		FMath::Max(0.f, Extent.X - Margin.X),
+		FMath::Max(0.f, Extent.Y - Margin.Y),
+		FMath::Max(0.f, Extent.Z - Margin.Z)
+	);
+
+	LocalLocation.X = FMath::Clamp(LocalLocation.X, -SafeExtent.X, SafeExtent.X);
+	LocalLocation.Y = FMath::Clamp(LocalLocation.Y, -SafeExtent.Y, SafeExtent.Y);
+	LocalLocation.Z = FMath::Clamp(LocalLocation.Z, -SafeExtent.Z, SafeExtent.Z);
+
+	return VolumeTransform.TransformPosition(LocalLocation);
+}
+
+FTransform ACombatArena::BuildCompanionEncounterTransform(const AActor* PlayerActor) const
+{
+	if (!PlayerActor) return FTransform::Identity;
+
+	TArray<FVector> CandidateLocations;
+	CandidateLocations.Add(PlayerActor->GetActorLocation()
+		+ PlayerActor->GetActorForwardVector() * CompanionFallbackOffset.X
+		+ PlayerActor->GetActorRightVector() * CompanionFallbackOffset.Y
+		+ FVector(0.f, 0.f, CompanionFallbackOffset.Z));
+
+	CandidateLocations.Add(PlayerActor->GetActorLocation() - PlayerActor->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, CompanionFallbackOffset.Z));
+	CandidateLocations.Add(PlayerActor->GetActorLocation() + PlayerActor->GetActorRightVector() * 150.f + FVector(0.f, 0.f, CompanionFallbackOffset.Z));
+	CandidateLocations.Add(PlayerActor->GetActorLocation() - PlayerActor->GetActorRightVector() * 150.f + FVector(0.f, 0.f, CompanionFallbackOffset.Z));
+
+	if (UWorld* World = GetWorld())
+	{
+		for (FVector& DesiredLocation : CandidateLocations)
 		{
-			Anchors.AddUnique(Anchor);
+			if (UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World))
+			{
+				FNavLocation ProjectedLocation;
+				if (NavSystem->ProjectPointToNavigation(DesiredLocation, ProjectedLocation, FVector(300.f, 300.f, 500.f)))
+					DesiredLocation = ProjectedLocation.Location;
+			}
+
+			FHitResult Hit;
+			const FVector TraceStart = DesiredLocation + FVector(0.f, 0.f, 300.f);
+			const FVector TraceEnd = DesiredLocation - FVector(0.f, 0.f, 1200.f);
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(EncounterCompanionGroundTrace), false, PlayerActor);
+
+			if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+				DesiredLocation = Hit.Location + FVector(0.f, 0.f, 5.f);
+
+			if (IsInsideContainmentVolume(DesiredLocation))
+				return FTransform(PlayerActor->GetActorRotation(), DesiredLocation, FVector::OneVector);
+		}
+
+		FVector FallbackLocation = ClampLocationToContainmentVolume(CandidateLocations[0]);
+		FHitResult Hit;
+		const FVector TraceStart = FallbackLocation + FVector(0.f, 0.f, 300.f);
+		const FVector TraceEnd = FallbackLocation - FVector(0.f, 0.f, 1200.f);
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(EncounterCompanionFallbackGroundTrace), false, PlayerActor);
+
+		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+			FallbackLocation = Hit.Location + FVector(0.f, 0.f, 5.f);
+
+		FallbackLocation = ClampLocationToContainmentVolume(FallbackLocation);
+		return FTransform(PlayerActor->GetActorRotation(), FallbackLocation, FVector::OneVector);
+	}
+
+	return FTransform(PlayerActor->GetActorRotation(), ClampLocationToContainmentVolume(CandidateLocations[0]), FVector::OneVector);
+}
+
+void ACombatArena::ReactivateCompanionAfterTeleport(AActor* CompanionActor) const
+{
+	if (!IsValid(CompanionActor)) return;
+
+	CompanionActor->SetActorHiddenInGame(false);
+	CompanionActor->SetActorEnableCollision(true);
+	CompanionActor->SetActorTickEnabled(true);
+
+	if (APawn* CompanionPawn = Cast<APawn>(CompanionActor))
+	{
+		if (!CompanionPawn->GetController())
+			CompanionPawn->SpawnDefaultController();
+	}
+
+	if (ACharacter* CompanionCharacter = Cast<ACharacter>(CompanionActor))
+	{
+		if (UCharacterMovementComponent* Movement = CompanionCharacter->GetCharacterMovement())
+		{
+			Movement->StopMovementImmediately();
+			Movement->SetMovementMode(MOVE_Walking);
 		}
 	}
 
-	Modify();
-	MarkPackageDirty();
-	UE_LOG(LogTemp, Log, TEXT("ACombatArena::AutoBindAnchorsByTag bound %d anchors on %s"),
-		Anchors.Num(), *GetName());
-	return Anchors.Num();
+	if (CompanionActor->GetClass()->ImplementsInterface(UPartnerStateInterface::StaticClass()))
+		IPartnerStateInterface::Execute_ApplyPartnerState(CompanionActor, CompanionEncounterStateValue);
 }

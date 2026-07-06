@@ -48,6 +48,10 @@ SourceArt/**/*.tga
 
 # Binary Files
 Binaries/*
+!Binaries/Win64/
+Binaries/Win64/*
+!Binaries/Win64/UnrealEditor-InTheDark.dll
+!Binaries/Win64/UnrealEditor.modules
 Plugins/**/Binaries/*
 
 # Builds
@@ -82,3 +86,4 @@ DerivedDataCache/*
 Content/EuropeanBeech/
 Content/Lolium_perenne_Nanite_Free/
 Content/MSPresets/Content/Hemlock_Forest/Meshes/SM_Mountain.uasset
+/Plugins

@@ -1,4 +1,5 @@
 #include "Combat/ElementProgressionComponent.h"
+#include "SaveSystem/InTheDarkGameInstance.h"
 
 UElementProgressionComponent::UElementProgressionComponent()
 {
@@ -9,6 +10,12 @@ UElementProgressionComponent::UElementProgressionComponent()
 void UElementProgressionComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
+		GetWorld() ? GetWorld()->GetGameInstance() : nullptr))
+	{
+		RestoreFromSave(GI->GetElementProgressionCache());
+	}
 }
 
 void UElementProgressionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -42,14 +49,34 @@ bool UElementProgressionComponent::GetElementProgressionData(FName ElementName, 
 	return false;
 }
 
+static FSavedElementProgressionEntry MakeSavedEntry(const FElementProgressionData& Data)
+{
+	FSavedElementProgressionEntry Entry;
+	Entry.ElementName = Data.ElementName;
+	Entry.Level = Data.Level;
+	Entry.KillCount = Data.KillCount;
+	Entry.DamageMultiplier = Data.DamageMultiplier;
+	Entry.ScaleMultiplier = Data.ScaleMultiplier;
+	Entry.MaxUnlockedComboStep = Data.MaxUnlockedComboStep;
+	Entry.bUnlocked = Data.bUnlocked;
+	return Entry;
+}
+
 void UElementProgressionComponent::UnlockElement(FName ElementName)
 {
 	FElementProgressionData* Data = FindElementProgressionData(ElementName);
 
 	if (!Data)
 		return;
-	
+
 	Data->bUnlocked = true;
+	OnElementProgressChanged.Broadcast(ElementName, *Data);
+
+	if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
+		GetWorld() ? GetWorld()->GetGameInstance() : nullptr))
+	{
+		GI->UpdateElementProgression(MakeSavedEntry(*Data));
+	}
 }
 
 TArray<FName> UElementProgressionComponent::GetUnlockedElements() const
@@ -81,19 +108,41 @@ void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 Kil
 	if (Data-> Level >= Data->MaxLevel)
 		return;
 	
+	const int32 PreviousLevel = Data->Level;
 
+	auto NotifyUI = [this, Data, ElementName, PreviousLevel]()
+	{
+		OnElementProgressChanged.Broadcast(ElementName, *Data);
+
+		if (Data->Level > PreviousLevel)
+		{
+			OnElementLevelUp.Broadcast(
+				ElementName,
+				PreviousLevel,
+				Data->Level
+			);
+		}
+	};
+	
 	Data->KillCount += KillAmount;
 	while (Data->Level < Data->MaxLevel)
 	{
 		const int32 RequiredIndex = Data->Level-1;
 
 		if (!Data->KillsRequiredPerLevel.IsValidIndex(RequiredIndex))
+		{
+			NotifyUI();
 			return;
+		}
+			
 
 		const int32 RequiredKills = Data->KillsRequiredPerLevel[RequiredIndex];
 
 		if (Data->KillCount<RequiredKills)
+		{
+			NotifyUI();
 			return;
+		}
 
 		Data->KillCount -= RequiredKills;
 		Data->Level++;
@@ -103,7 +152,12 @@ void UElementProgressionComponent::AddKillToElement(FName ElementName, int32 Kil
 		Data->ScaleMultiplier +=0.10f;
 	}
 
-	
+	if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
+		GetWorld() ? GetWorld()->GetGameInstance() : nullptr))
+	{
+		GI->UpdateElementProgression(MakeSavedEntry(*Data));
+	}
+	NotifyUI();
 }
 
 const TArray<FElementProgressionData>& UElementProgressionComponent::GetAllElementProgressionData() const
@@ -111,4 +165,18 @@ const TArray<FElementProgressionData>& UElementProgressionComponent::GetAllEleme
 	return ElementProgressionData;
 }
 
-
+void UElementProgressionComponent::RestoreFromSave(const TArray<FSavedElementProgressionEntry>& SavedData)
+{
+	for (const FSavedElementProgressionEntry& Saved : SavedData)
+	{
+		FElementProgressionData* Data = FindElementProgressionData(Saved.ElementName);
+		if (!Data) continue;
+		Data->Level                = Saved.Level;
+		Data->KillCount            = Saved.KillCount;
+		Data->DamageMultiplier     = Saved.DamageMultiplier;
+		Data->ScaleMultiplier      = Saved.ScaleMultiplier;
+		Data->MaxUnlockedComboStep = Saved.MaxUnlockedComboStep;
+		Data->bUnlocked            = Saved.bUnlocked;
+		OnElementProgressChanged.Broadcast(Saved.ElementName, *Data);
+	}
+}

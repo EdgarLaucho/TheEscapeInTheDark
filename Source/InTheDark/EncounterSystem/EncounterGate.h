@@ -5,13 +5,7 @@
 #include "EncounterGate.generated.h"
 
 class UStaticMeshComponent;
-class UNiagaraComponent;
 
-/**
- * Barrera de bloqueo de paso que el encuentro cierra mientras hay una oleada activa.
- * Bloquea solo al jugador. El mesh gestiona tanto la colisión como la visibilidad.
- * La lógica visual (animación de apertura) se implementa en el Blueprint derivado.
- */
 UCLASS(Blueprintable, BlueprintType)
 class INTHEDARK_API AEncounterGate : public AActor
 {
@@ -26,18 +20,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gate")
 	void Unlock();
 
+	UFUNCTION(BlueprintCallable, Category = "Gate")
+	void SetLockedInstant(bool bNewLocked);
+
 	UFUNCTION(BlueprintPure, Category = "Gate")
 	bool IsLocked() const { return bLocked; }
 
-	/** Hook de Blueprint para efectos visuales al cerrar (runas, niebla, etc). */
+	UFUNCTION(BlueprintPure, Category = "Gate")
+	FVector GetOpenRelativeLocation() const;
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Gate")
 	void OnGateLocked();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Gate")
 	void OnGateUnlocked();
-
-	UFUNCTION(BlueprintCallable, Category = "Gate")
-	void FinishUnlock();
 
 protected:
 	virtual void BeginPlay() override;
@@ -45,13 +41,24 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gate|Components")
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
 
-	/** Si es true, empieza bloqueado. Normalmente false; el arena lo bloquea al iniciar. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate")
 	bool bStartLocked = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate", meta = (ClampMin = "0.0"))
+	float SinkDepthOffset = 450.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate", meta = (ClampMin = "0.0"))
+	float SinkTime = 0.8f;
+
+protected:
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Gate")
+	FVector ClosedRelativeLocation = FVector::ZeroVector;
 
 private:
 	UPROPERTY(Transient)
 	bool bLocked = false;
 
 	void ApplyLockState();
+	void SnapGateToState(bool bClosed);
+	void SetGateCollisionEnabled(bool bEnabled);
 };

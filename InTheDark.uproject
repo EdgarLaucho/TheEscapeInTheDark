@@ -32,6 +32,18 @@
 		{
 			"Name": "RawInput",
 			"Enabled": true
+		},
+		{
+			"Name": "StaticMeshEditorModeling",
+			"Enabled": true
+		},
+		{
+			"Name": "CQTestEnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "SequencerSubtitles",
+			"Enabled": true
 		}
 	]
 }

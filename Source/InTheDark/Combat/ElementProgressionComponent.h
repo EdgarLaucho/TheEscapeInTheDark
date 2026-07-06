@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "SaveSystem/SaveTypes.h"
 #include "ElementProgressionComponent.generated.h"
 
 USTRUCT(BlueprintType)
@@ -40,6 +41,18 @@ struct FElementProgressionData
 	
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnElementProgressChanged,
+	FName, ElementName,
+	FElementProgressionData, ProgressionData
+);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FOnElementLevelUp,
+	FName, ElementName,
+	int32, PreviousLevel,
+	int32, NewLevel
+);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class INTHEDARK_API UElementProgressionComponent : public UActorComponent
@@ -58,6 +71,12 @@ public:
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="ElementProgression")
 	TArray<FElementProgressionData> ElementProgressionData;
 
+	UPROPERTY(BlueprintAssignable, Category="ElementProgression|Events")
+	FOnElementProgressChanged OnElementProgressChanged;
+
+	UPROPERTY(BlueprintAssignable, Category="ElementProgression|Events")
+	FOnElementLevelUp OnElementLevelUp;
+
 	UFUNCTION(BlueprintCallable, Category="ElementProgression")
 	TArray<FName> GetUnlockedElements() const;
 
@@ -73,7 +92,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="ElementProgression")
 	const TArray<FElementProgressionData>& GetAllElementProgressionData() const;
 
+	UFUNCTION(BlueprintCallable, Category="ElementProgression")
+	void RestoreFromSave(const TArray<FSavedElementProgressionEntry>& SavedData);
+
 private:
 	FElementProgressionData* FindElementProgressionData(FName ElementName);
-	
 };
