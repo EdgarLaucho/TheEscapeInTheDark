@@ -3,9 +3,14 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "SaveSystem/SaveTypes.h"
+#include "UObject/SoftObjectPtr.h"
 #include "InTheDarkGameInstance.generated.h"
 
+class AActor;
+class APawn;
+class UAudioComponent;
 class UInTheDarkSaveGame;
+class USoundBase;
 class UWorld;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveLoaded);
@@ -78,7 +83,7 @@ public:
 	FName GetLastCheckpointID() const { return PlayerStateCache.LastCheckpointID; }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
-	bool HasSavedTransform() const { return PlayerStateCache.bHasSavedTransform || PlayerStateCache.LastCheckpointID != NAME_None; }
+	bool HasSavedTransform() const { return HasValidSavedPlayerTransform(); }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player", meta = (WorldContext = "WorldContextObject"))
 	FTransform GetSpawnTransform(UObject* WorldContextObject) const;
@@ -170,6 +175,21 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
 	bool IsTutorialFinished() const { return TutorialStateCache.bFinished; }
 
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void SetCurrentMusicZone(FName ZoneId, USoundBase* Music, float FadeTime = 0.5f);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void PlayMusicByAsset(USoundBase* Music, FName MusicId, FName ZoneId, float FadeTime = 0.5f);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void RestoreMusicFromSave(float FadeTime = 0.5f);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void StopMusic(float FadeTime = 0.5f, bool bRememberSilence = true);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Music")
+	FSavedMusicState GetMusicState() const { return MusicStateCache; }
+
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Dialogue")
 	bool IsDialogueSeen(FName DialogueID) const;
 
@@ -224,6 +244,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
 	bool bAutosaveOnMapChange = false;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Companion")
+	TSoftClassPtr<AActor> CompanionClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Companion")
+	FVector CompanionLoadOffset = FVector(-150.f, 120.f, 20.f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Companion")
+	uint8 CompanionLoadedStateValue = 2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Music")
+	TSoftObjectPtr<USoundBase> DefaultFallbackMusic;
+
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnSaveLoaded OnSaveLoaded;
 
@@ -252,12 +284,23 @@ protected:
 	bool IsMainMenuMap(const FString& MapName) const;
 	void RequestSaveSnapshot();
 	void CapturePlayerSnapshot();
+	void CaptureMusicSnapshot();
+	void RestoreLoadedWorldState(UWorld* LoadedWorld);
+	bool HasValidSavedPlayerTransform() const;
+	AActor* FindCompanionActor(UWorld* World) const;
+	FTransform BuildCompanionLoadTransform(UWorld* World, const APawn* PlayerPawn) const;
+	void ReactivateLoadedCompanion(AActor* CompanionActor);
+	UAudioComponent* GetPlayerMusicAudioComponent() const;
+	USoundBase* GetPlayerControllerCurrentMusic() const;
+	void SetPlayerControllerCurrentMusic(USoundBase* Music) const;
+	void ApplyMusicToAudioComponent(USoundBase* Music, float FadeTime);
 
 private:
 	TArray<FSavedElementProgressionEntry> ElementProgressionCache;
 	FSavedCompanionPersonality CompanionPersonalityCache;
 	FSavedCompanionState CompanionStateCache;
 	FSavedTutorialState TutorialStateCache;
+	FSavedMusicState MusicStateCache;
 	TMap<FName, TSet<FString>> WorldStateCache;
 	TSet<FName> ClearedEncountersCache;
 	TSet<FName> SeenDialoguesCache;
@@ -270,5 +313,9 @@ private:
 	bool bSaveDirty = false;
 	bool bAsyncSaveInFlight = false;
 	bool bRequestingSaveSnapshot = false;
+	int32 PendingLoadRestoreAttempts = 0;
 	FDelegateHandle PostLoadMapHandle;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> ActiveMusicComponent;
 };
