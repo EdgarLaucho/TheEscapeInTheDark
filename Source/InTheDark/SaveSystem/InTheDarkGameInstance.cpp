@@ -109,6 +109,14 @@ bool UInTheDarkGameInstance::IsMainMenuMap(const FString& MapName) const
 	return MapName.Equals(MenuName) || MapName.EndsWith(TEXT("_") + MenuName);
 }
 
+bool UInTheDarkGameInstance::IsCreditsMap(const FString& MapName) const
+{
+	if (CreditsLevelName.IsNone()) return false;
+
+	const FString CreditsName = CreditsLevelName.ToString();
+	return MapName.Equals(CreditsName) || MapName.EndsWith(TEXT("_") + CreditsName);
+}
+
 void UInTheDarkGameInstance::ResetCache()
 {
 	ElementProgressionCache.Reset();
@@ -790,7 +798,7 @@ void UInTheDarkGameInstance::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 {
 	if (!LoadedWorld) return;
 
-	if (DoesSaveSlotExist() && !IsMainMenuMap(LoadedWorld->GetMapName()))
+	if (DoesSaveSlotExist() && !IsMainMenuMap(LoadedWorld->GetMapName()) && !IsCreditsMap(LoadedWorld->GetMapName()))
 	{
 		SetLastMapName(LoadedWorld->GetMapName());
 		PendingLoadRestoreAttempts = 0;
@@ -819,7 +827,7 @@ bool UInTheDarkGameInstance::HasValidSavedPlayerTransform() const
 
 void UInTheDarkGameInstance::RestoreLoadedWorldState(UWorld* LoadedWorld)
 {
-	if (!LoadedWorld || IsMainMenuMap(LoadedWorld->GetMapName())) return;
+	if (!LoadedWorld || IsMainMenuMap(LoadedWorld->GetMapName()) || IsCreditsMap(LoadedWorld->GetMapName())) return;
 
 	APlayerController* PC = LoadedWorld->GetFirstPlayerController();
 	APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;

@@ -43,6 +43,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
 	FName MainMenuLevelName = TEXT("Lvl_MainMenuEscape");
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
+	FName CreditsLevelName = TEXT("Lvl_FinalCredits");
+
 	UFUNCTION(BlueprintCallable, Category = "Save|Slots")
 	void SwitchToSlot(int32 SlotIndex);
 
@@ -285,6 +288,7 @@ protected:
 	FString GetSlotName(int32 SlotIndex) const;
 	bool IsValidSlotIndex(int32 SlotIndex) const;
 	bool IsMainMenuMap(const FString& MapName) const;
+	bool IsCreditsMap(const FString& MapName) const;
 	void RequestSaveSnapshot();
 	void CapturePlayerSnapshot();
 	void CaptureElementProgressionSnapshot();
