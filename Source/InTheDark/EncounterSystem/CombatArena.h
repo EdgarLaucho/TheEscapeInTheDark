@@ -53,6 +53,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Encounter|Companion")
 	uint8 CompanionEncounterStateValue = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Encounter|Companion")
+	float CompanionCheckInterval = 2.f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Encounter|Components")
 	TObjectPtr<USceneComponent> Root;
 
@@ -81,12 +84,14 @@ protected:
 
 private:
 	bool bAlreadyStartedThisSession = false;
+	FTimerHandle CompanionCheckTimerHandle;
 
 	bool LookupIsAlreadyCleared() const;
 	void LockEntryGates();
 	void UnlockEntryGates();
 	void UnlockExitGates();
 	void UnlockGatesForClearedState();
+	void CheckCompanionDistance();
 	AActor* FindCompanionActor() const;
 	bool IsInsideContainmentVolume(const FVector& Location) const;
 	FVector ClampLocationToContainmentVolume(const FVector& Location) const;

@@ -14,7 +14,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
 #include "EngineUtils.h"
-#include "UObject/UnrealType.h"
+#include "AI/PartnerStateInterface.h"
+#include "SaveSystem/PlayerMusicStateInterface.h"
 
 UInTheDarkGameInstance::UInTheDarkGameInstance()
 {
@@ -994,41 +995,27 @@ UAudioComponent* UInTheDarkGameInstance::GetPlayerMusicAudioComponent() const
 {
 	UWorld* World = GetWorld();
 	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
-	if (!PC) return nullptr;
-
-	if (FObjectProperty* Property = FindFProperty<FObjectProperty>(PC->GetClass(), TEXT("MusicAudio")))
-	{
-		if (UAudioComponent* AudioComponent = Cast<UAudioComponent>(Property->GetObjectPropertyValue_InContainer(PC)))
-			return AudioComponent;
-	}
-
-	return PC->FindComponentByClass<UAudioComponent>();
+	return PC ? PC->FindComponentByClass<UAudioComponent>() : nullptr;
 }
 
 USoundBase* UInTheDarkGameInstance::GetPlayerControllerCurrentMusic() const
 {
 	UWorld* World = GetWorld();
 	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
-	if (!PC) return nullptr;
 
-	if (FObjectProperty* Property = FindFProperty<FObjectProperty>(PC->GetClass(), TEXT("CurrentMusic")))
-	{
-		return Cast<USoundBase>(Property->GetObjectPropertyValue_InContainer(PC));
-	}
+	if (!PC || !PC->GetClass()->ImplementsInterface(UPlayerMusicStateInterface::StaticClass()))
+		return nullptr;
 
-	return nullptr;
+	return IPlayerMusicStateInterface::Execute_GetCurrentMusic(PC);
 }
 
 void UInTheDarkGameInstance::SetPlayerControllerCurrentMusic(USoundBase* Music) const
 {
 	UWorld* World = GetWorld();
 	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
-	if (!PC) return;
 
-	if (FObjectProperty* Property = FindFProperty<FObjectProperty>(PC->GetClass(), TEXT("CurrentMusic")))
-	{
-		Property->SetObjectPropertyValue_InContainer(PC, Music);
-	}
+	if (PC && PC->GetClass()->ImplementsInterface(UPlayerMusicStateInterface::StaticClass()))
+		IPlayerMusicStateInterface::Execute_SetCurrentMusic(PC, Music);
 }
 
 void UInTheDarkGameInstance::ApplyMusicToAudioComponent(USoundBase* Music, float FadeTime)
@@ -1144,16 +1131,10 @@ void UInTheDarkGameInstance::ReactivateLoadedCompanion(AActor* CompanionActor)
 		}
 	}
 
-	if (UFunction* SetStateFunction = CompanionActor->FindFunction(TEXT("SetPartnerState")))
+	if (CompanionActor->GetClass()->ImplementsInterface(UPartnerStateInterface::StaticClass()))
 	{
-		struct FSetPartnerStateParams
-		{
-			uint8 NewState = 0;
-		};
-
-		FSetPartnerStateParams Params;
 		const uint8 SavedState = CompanionStateCache.CurrentStateValue;
-		Params.NewState = (SavedState == 0 || SavedState == 1) ? CompanionLoadedStateValue : SavedState;
-		CompanionActor->ProcessEvent(SetStateFunction, &Params);
+		const uint8 StateToApply = (SavedState == 0 || SavedState == 1) ? CompanionLoadedStateValue : SavedState;
+		IPartnerStateInterface::Execute_ApplyPartnerState(CompanionActor, StateToApply);
 	}
 }

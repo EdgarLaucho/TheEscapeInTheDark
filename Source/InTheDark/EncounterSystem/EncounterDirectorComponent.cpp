@@ -211,7 +211,8 @@ void UEncounterDirectorComponent::TrackSpawnedEnemy(AActor* Enemy)
 {
 	if (!Enemy) return;
 
-	AliveEnemies.Add(Enemy);
+	AliveEnemies.AddUnique(Enemy);
+	Enemy->OnDestroyed.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
 	Enemy->OnDestroyed.AddDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
 
 	if (Enemy->GetClass()->ImplementsInterface(UEncounterTargetInterface::StaticClass()))
@@ -234,6 +235,9 @@ void UEncounterDirectorComponent::ReleaseAliveEnemiesToPool()
 
 void UEncounterDirectorComponent::HandleEnemyDestroyed(AActor* DestroyedActor)
 {
+	if (DestroyedActor)
+		DestroyedActor->OnDestroyed.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
+
 	AliveEnemies.RemoveAll([DestroyedActor](const TWeakObjectPtr<AActor>& E)
 	{
 		return !E.IsValid() || E.Get() == DestroyedActor;
@@ -244,6 +248,9 @@ void UEncounterDirectorComponent::HandleEnemyDestroyed(AActor* DestroyedActor)
 
 void UEncounterDirectorComponent::HandleEnemyReleasedToPool(AActor* ReleasedActor)
 {
+	if (ReleasedActor)
+		ReleasedActor->OnDestroyed.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
+
 	AliveEnemies.RemoveAll([ReleasedActor](const TWeakObjectPtr<AActor>& E)
 	{
 		return E.Get() == ReleasedActor;

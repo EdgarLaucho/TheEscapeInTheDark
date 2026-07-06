@@ -10,7 +10,6 @@ class ASpawnAnchor;
 class ACombatArena;
 class UObjectPoolSubsystem;
 class UPrimitiveComponent;
-struct FStreamableHandle;
 
 UENUM()
 enum class EEncounterState : uint8
@@ -45,12 +44,7 @@ private:
 	FTimerHandle SpawnTimerHandle;
 	FTimerHandle DelayTimerHandle;
 	FTimerHandle PostClearTimerHandle;
-	TSharedPtr<FStreamableHandle> EncounterPreloadHandle;
-	TMap<FSoftObjectPath, TWeakObjectPtr<UClass>> PreloadedEnemyClasses;
 
-	void PreloadEncounterClasses();
-	void HandleEncounterClassesLoaded();
-	TSubclassOf<AActor> ResolveEnemyClass(const FEnemySpawn& Directive) const;
 	void BeginNextWave();
 	void StartWave();
 	void WarmUpCurrentWavePools(const FEncounterWave& Wave);
@@ -72,7 +66,6 @@ private:
 	UFUNCTION()
 	void HandleEnemyLeftContainment(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	bool IsEnemyPendingRemoval(const AActor* Enemy) const;
 	void ReturnEnemyToAnchor(AActor* Enemy);
 
 	ACombatArena* GetArena() const;
