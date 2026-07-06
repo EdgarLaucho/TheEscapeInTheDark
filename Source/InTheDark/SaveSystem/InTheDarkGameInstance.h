@@ -10,6 +10,7 @@ class AActor;
 class APawn;
 class UAudioComponent;
 class UInTheDarkSaveGame;
+class UUserWidget;
 class USoundBase;
 class UWorld;
 
@@ -256,6 +257,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Music")
 	TSoftObjectPtr<USoundBase> DefaultFallbackMusic;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Loading")
+	TSoftClassPtr<UUserWidget> LoadingScreenWidgetClass;
+
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnSaveLoaded OnSaveLoaded;
 
@@ -284,9 +288,16 @@ protected:
 	bool IsMainMenuMap(const FString& MapName) const;
 	void RequestSaveSnapshot();
 	void CapturePlayerSnapshot();
+	void CaptureElementProgressionSnapshot();
 	void CaptureMusicSnapshot();
 	void RestoreLoadedWorldState(UWorld* LoadedWorld);
 	bool HasValidSavedPlayerTransform() const;
+	bool BuildSafePlayerLoadTransform(UWorld* World, const APawn* PlayerPawn, FTransform& OutTransform) const;
+	void PreparePlayerForStreamingRestore(APawn* PlayerPawn) const;
+	void FinishPlayerStreamingRestore(APawn* PlayerPawn) const;
+	FTransform GetFallbackPlayerStartTransform(UWorld* World) const;
+	void ShowLoadingScreen();
+	void HideLoadingScreen();
 	AActor* FindCompanionActor(UWorld* World) const;
 	FTransform BuildCompanionLoadTransform(UWorld* World, const APawn* PlayerPawn) const;
 	void ReactivateLoadedCompanion(AActor* CompanionActor);
@@ -314,8 +325,12 @@ private:
 	bool bAsyncSaveInFlight = false;
 	bool bRequestingSaveSnapshot = false;
 	int32 PendingLoadRestoreAttempts = 0;
+	bool bWaitingForSavedPlayerGround = false;
 	FDelegateHandle PostLoadMapHandle;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> ActiveMusicComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> ActiveLoadingScreenWidget;
 };

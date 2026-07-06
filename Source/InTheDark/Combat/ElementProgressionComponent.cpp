@@ -10,6 +10,12 @@ UElementProgressionComponent::UElementProgressionComponent()
 void UElementProgressionComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
+		GetWorld() ? GetWorld()->GetGameInstance() : nullptr))
+	{
+		RestoreFromSave(GI->GetElementProgressionCache());
+	}
 }
 
 void UElementProgressionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -64,6 +70,7 @@ void UElementProgressionComponent::UnlockElement(FName ElementName)
 		return;
 
 	Data->bUnlocked = true;
+	OnElementProgressChanged.Broadcast(ElementName, *Data);
 
 	if (UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
 		GetWorld() ? GetWorld()->GetGameInstance() : nullptr))
@@ -170,6 +177,7 @@ void UElementProgressionComponent::RestoreFromSave(const TArray<FSavedElementPro
 		Data->ScaleMultiplier      = Saved.ScaleMultiplier;
 		Data->MaxUnlockedComboStep = Saved.MaxUnlockedComboStep;
 		Data->bUnlocked            = Saved.bUnlocked;
+		OnElementProgressChanged.Broadcast(Saved.ElementName, *Data);
 	}
 }
 

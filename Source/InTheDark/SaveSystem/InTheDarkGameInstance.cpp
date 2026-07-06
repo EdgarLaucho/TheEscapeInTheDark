@@ -1,11 +1,13 @@
 ﻿#include "SaveSystem/InTheDarkGameInstance.h"
 #include "SaveSystem/InTheDarkSaveGame.h"
+#include "Combat/ElementProgressionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Misc/CoreDelegates.h"
 #include "TimerManager.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
+#include "Blueprint/UserWidget.h"
 #include "GameFramework/PlayerStart.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Character.h"
@@ -18,6 +20,7 @@ UInTheDarkGameInstance::UInTheDarkGameInstance()
 {
 	CompanionClass = TSoftClassPtr<AActor>(FSoftObjectPath(TEXT("/Game/AI/Partner/Blueprints/BP_PartnerAICharacter.BP_PartnerAICharacter_C")));
 	DefaultFallbackMusic = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Level/Lvl/Sound/HouseMusic.HouseMusic")));
+	LoadingScreenWidgetClass = TSoftClassPtr<UUserWidget>(FSoftObjectPath(TEXT("/Game/Level/Lvl/MainMenu/UserInterface/WBP_LoadingScreen.WBP_LoadingScreen_C")));
 }
 
 UInTheDarkGameInstance* UInTheDarkGameInstance::Get(const UObject* WorldContextObject)
@@ -47,6 +50,19 @@ namespace
 		}
 
 		return MapName;
+	}
+
+	FSavedElementProgressionEntry MakeSavedElementProgressionEntry(const FElementProgressionData& Data)
+	{
+		FSavedElementProgressionEntry Entry;
+		Entry.ElementName = Data.ElementName;
+		Entry.Level = Data.Level;
+		Entry.KillCount = Data.KillCount;
+		Entry.DamageMultiplier = Data.DamageMultiplier;
+		Entry.ScaleMultiplier = Data.ScaleMultiplier;
+		Entry.MaxUnlockedComboStep = Data.MaxUnlockedComboStep;
+		Entry.bUnlocked = Data.bUnlocked;
+		return Entry;
 	}
 }
 
@@ -116,8 +132,10 @@ void UInTheDarkGameInstance::RequestSaveSnapshot()
 	if (bRequestingSaveSnapshot) return;
 	bRequestingSaveSnapshot = true;
 	CapturePlayerSnapshot();
+	CaptureElementProgressionSnapshot();
 	CaptureMusicSnapshot();
 	OnSaveSnapshotRequested.Broadcast();
+	CaptureElementProgressionSnapshot();
 	CaptureMusicSnapshot();
 	bRequestingSaveSnapshot = false;
 }
@@ -133,6 +151,30 @@ void UInTheDarkGameInstance::CapturePlayerSnapshot()
 
 	PlayerStateCache.Transform = Pawn->GetActorTransform();
 	PlayerStateCache.bHasSavedTransform = true;
+	bSaveDirty = true;
+}
+
+void UInTheDarkGameInstance::CaptureElementProgressionSnapshot()
+{
+	UWorld* World = GetWorld();
+	if (!World || IsMainMenuMap(World->GetMapName())) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	if (!Pawn) return;
+
+	UElementProgressionComponent* ElementProgression = Pawn->FindComponentByClass<UElementProgressionComponent>();
+	if (!ElementProgression) return;
+
+	ElementProgressionCache.Reset();
+	for (const FElementProgressionData& Data : ElementProgression->GetAllElementProgressionData())
+	{
+		if (!Data.ElementName.IsNone())
+		{
+			ElementProgressionCache.Add(MakeSavedElementProgressionEntry(Data));
+		}
+	}
+
 	bSaveDirty = true;
 }
 
@@ -751,6 +793,7 @@ void UInTheDarkGameInstance::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
 	{
 		SetLastMapName(LoadedWorld->GetMapName());
 		PendingLoadRestoreAttempts = 0;
+		bWaitingForSavedPlayerGround = false;
 		FTimerDelegate RestoreDelegate = FTimerDelegate::CreateUObject(this, &UInTheDarkGameInstance::RestoreLoadedWorldState, LoadedWorld);
 		LoadedWorld->GetTimerManager().SetTimerForNextTick(RestoreDelegate);
 		return;
@@ -791,7 +834,36 @@ void UInTheDarkGameInstance::RestoreLoadedWorldState(UWorld* LoadedWorld)
 
 	if (PlayerPawn && HasValidSavedPlayerTransform())
 	{
-		PlayerPawn->SetActorTransform(PlayerStateCache.Transform, false, nullptr, ETeleportType::TeleportPhysics);
+		ShowLoadingScreen();
+
+		FTransform SafePlayerTransform;
+		if (!BuildSafePlayerLoadTransform(LoadedWorld, PlayerPawn, SafePlayerTransform))
+		{
+			if (!bWaitingForSavedPlayerGround)
+			{
+				bWaitingForSavedPlayerGround = true;
+				PreparePlayerForStreamingRestore(PlayerPawn);
+			}
+
+			if (PendingLoadRestoreAttempts < 80)
+			{
+				++PendingLoadRestoreAttempts;
+				FTimerHandle RetryHandle;
+				FTimerDelegate RetryDelegate = FTimerDelegate::CreateUObject(this, &UInTheDarkGameInstance::RestoreLoadedWorldState, LoadedWorld);
+				LoadedWorld->GetTimerManager().SetTimer(RetryHandle, RetryDelegate, 0.1f, false);
+				return;
+			}
+
+			PlayerPawn->SetActorTransform(GetFallbackPlayerStartTransform(LoadedWorld), false, nullptr, ETeleportType::TeleportPhysics);
+		}
+		else
+		{
+			PlayerPawn->SetActorTransform(SafePlayerTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		}
+
+		bWaitingForSavedPlayerGround = false;
+		FinishPlayerStreamingRestore(PlayerPawn);
+		HideLoadingScreen();
 	}
 
 	if (PlayerPawn && CompanionStateCache.bHasAwoken)
@@ -808,6 +880,114 @@ void UInTheDarkGameInstance::RestoreLoadedWorldState(UWorld* LoadedWorld)
 
 	if (bAutosaveOnMapChange && bSaveDirty)
 		WriteSaveToDiskAsync();
+}
+
+bool UInTheDarkGameInstance::BuildSafePlayerLoadTransform(UWorld* World, const APawn* PlayerPawn, FTransform& OutTransform) const
+{
+	if (!World || !PlayerPawn || !HasValidSavedPlayerTransform()) return false;
+
+	FVector TargetLocation = PlayerStateCache.Transform.GetLocation();
+
+	if (UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World))
+	{
+		FNavLocation ProjectedLocation;
+		if (NavSystem->ProjectPointToNavigation(TargetLocation, ProjectedLocation, FVector(250.f, 250.f, 500.f)))
+		{
+			TargetLocation = ProjectedLocation.Location;
+		}
+	}
+
+	FHitResult Hit;
+	const FVector TraceStart = TargetLocation + FVector(0.f, 0.f, 800.f);
+	const FVector TraceEnd = TargetLocation - FVector(0.f, 0.f, 3000.f);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PlayerLoadGroundTrace), false, PlayerPawn);
+
+	if (!World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+		return false;
+
+	if (!Hit.bBlockingHit)
+		return false;
+
+	TargetLocation = Hit.Location + FVector(0.f, 0.f, 8.f);
+	OutTransform = PlayerStateCache.Transform;
+	OutTransform.SetLocation(TargetLocation);
+	return true;
+}
+
+void UInTheDarkGameInstance::PreparePlayerForStreamingRestore(APawn* PlayerPawn) const
+{
+	if (!PlayerPawn) return;
+
+	FTransform StreamingTransform = PlayerStateCache.Transform;
+	StreamingTransform.SetLocation(PlayerStateCache.Transform.GetLocation() + FVector(0.f, 0.f, 600.f));
+	PlayerPawn->SetActorTransform(StreamingTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	PlayerPawn->SetActorHiddenInGame(true);
+	PlayerPawn->SetActorEnableCollision(false);
+
+	if (ACharacter* Character = Cast<ACharacter>(PlayerPawn))
+	{
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+		{
+			Movement->StopMovementImmediately();
+			Movement->DisableMovement();
+		}
+	}
+}
+
+void UInTheDarkGameInstance::FinishPlayerStreamingRestore(APawn* PlayerPawn) const
+{
+	if (!PlayerPawn) return;
+
+	PlayerPawn->SetActorHiddenInGame(false);
+	PlayerPawn->SetActorEnableCollision(true);
+
+	if (ACharacter* Character = Cast<ACharacter>(PlayerPawn))
+	{
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+		{
+			Movement->StopMovementImmediately();
+			Movement->SetMovementMode(MOVE_Walking);
+		}
+	}
+}
+
+FTransform UInTheDarkGameInstance::GetFallbackPlayerStartTransform(UWorld* World) const
+{
+	if (World)
+	{
+		for (TActorIterator<APlayerStart> It(World); It; ++It)
+			return (*It)->GetActorTransform();
+	}
+
+	return FTransform::Identity;
+}
+
+void UInTheDarkGameInstance::ShowLoadingScreen()
+{
+	if (ActiveLoadingScreenWidget && ActiveLoadingScreenWidget->IsInViewport())
+		return;
+
+	UClass* WidgetClass = LoadingScreenWidgetClass.LoadSynchronous();
+	if (!WidgetClass) return;
+
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	if (!PC) return;
+
+	ActiveLoadingScreenWidget = CreateWidget<UUserWidget>(PC, WidgetClass);
+	if (ActiveLoadingScreenWidget)
+	{
+		ActiveLoadingScreenWidget->AddToViewport(1000);
+	}
+}
+
+void UInTheDarkGameInstance::HideLoadingScreen()
+{
+	if (ActiveLoadingScreenWidget)
+	{
+		ActiveLoadingScreenWidget->RemoveFromParent();
+		ActiveLoadingScreenWidget = nullptr;
+	}
 }
 
 UAudioComponent* UInTheDarkGameInstance::GetPlayerMusicAudioComponent() const
