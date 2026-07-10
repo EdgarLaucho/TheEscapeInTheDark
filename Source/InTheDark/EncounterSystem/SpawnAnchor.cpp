@@ -1,71 +1,42 @@
 #include "EncounterSystem/SpawnAnchor.h"
 #include "Components/BillboardComponent.h"
 #include "Components/ArrowComponent.h"
-#include "Engine/Texture2D.h"
-#include "Engine/World.h"
-#include "GameFramework/PlayerController.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
-#include "Engine/OverlapResult.h"
 
-namespace
+FTransform ASpawnAnchor::BuildGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
 {
-	float GetEncounterSpawnFloorOffset(TSubclassOf<AActor> EnemyClass)
+	const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
+
+	FTransform Result = SourceTransform;
+	Result.SetScale3D(ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector);
+
+	if (!World || !EnemyClass) return Result;
+
+	const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
+	const float FloorOffset = Capsule ? Capsule->GetUnscaledCapsuleHalfHeight() * Capsule->GetRelativeScale3D().Z : 0.f;
+
+	if (FloorOffset <= 0.f) return Result;
+
+	FVector Location = Result.GetLocation();
+	const FVector TraceStart = Location + FVector(0.f, 0.f, 10.f);
+	const FVector TraceEnd = Location - FVector(0.f, 0.f, 5000.f);
+
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterSpawnGroundTrace), false);
+
+	if (IgnoredActor) QueryParams.AddIgnoredActor(IgnoredActor);
+
+	if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
 	{
-		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
-		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
-		return Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f;
+		Location.Z = Hit.ImpactPoint.Z + FloorOffset + 2.f;
+		Result.SetLocation(Location);
 	}
 
-	void GetEncounterSpawnCapsule(TSubclassOf<AActor> EnemyClass, float& OutRadius, float& OutHalfHeight)
-	{
-		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
-		const UCapsuleComponent* Capsule = ClassDefault ? ClassDefault->FindComponentByClass<UCapsuleComponent>() : nullptr;
-		OutRadius = Capsule ? Capsule->GetScaledCapsuleRadius() : 80.f;
-		OutHalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 120.f;
-	}
-
-	FVector GetEncounterSpawnDefaultScale(TSubclassOf<AActor> EnemyClass)
-	{
-		const AActor* ClassDefault = EnemyClass ? Cast<AActor>(EnemyClass->GetDefaultObject()) : nullptr;
-		return ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector;
-	}
-
-	FTransform BuildEncounterGroundedSpawnTransform(UWorld* World, TSubclassOf<AActor> EnemyClass, const FTransform& SourceTransform, const AActor* IgnoredActor)
-	{
-		FTransform Result = SourceTransform;
-		Result.SetScale3D(GetEncounterSpawnDefaultScale(EnemyClass));
-		if (!World || !EnemyClass)
-		{
-			return Result;
-		}
-
-		const float FloorOffset = GetEncounterSpawnFloorOffset(EnemyClass);
-		if (FloorOffset <= 0.f)
-		{
-			return Result;
-		}
-
-		FVector Location = Result.GetLocation();
-		const FVector TraceStart = Location + FVector(0.f, 0.f, FMath::Max(500.f, FloorOffset + 200.f));
-		const FVector TraceEnd = Location - FVector(0.f, 0.f, 5000.f);
-
-		FHitResult Hit;
-		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterSpawnGroundTrace), false);
-		if (IgnoredActor)
-		{
-			QueryParams.AddIgnoredActor(IgnoredActor);
-		}
-
-		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
-		{
-			Location.Z = Hit.ImpactPoint.Z + FloorOffset + 2.f;
-			Result.SetLocation(Location);
-		}
-
-		return Result;
-	}
+	return Result;
 }
 
 ASpawnAnchor::ASpawnAnchor()
@@ -78,6 +49,7 @@ ASpawnAnchor::ASpawnAnchor()
 
 #if WITH_EDITORONLY_DATA
 	Billboard = CreateDefaultSubobject<UBillboardComponent>(TEXT("Billboard"));
+
 	if (Billboard)
 	{
 		Billboard->SetupAttachment(Root);
@@ -85,6 +57,7 @@ ASpawnAnchor::ASpawnAnchor()
 	}
 
 	Arrow = CreateDefaultSubobject<UArrowComponent>(TEXT("Facing"));
+
 	if (Arrow)
 	{
 		Arrow->SetupAttachment(Root);
@@ -100,103 +73,38 @@ void ASpawnAnchor::BeginPlay()
 	LastSpawnTimeSeconds = -1e9f;
 }
 
-bool ASpawnAnchor::IsAvailableForSpawn(const AActor* PlayerActor) const
+bool ASpawnAnchor::IsAvailableForSpawn() const
 {
 	const UWorld* World = GetWorld();
-	if (!World) { return false; }
+	if (!World)  return false; 
 
-	if (PointCooldown > 0.f)
-	{
-		const float Now = World->GetTimeSeconds();
-		if (Now - LastSpawnTimeSeconds < PointCooldown)
-		{
-			return false;
-		}
-	}
-
-	if (!PlayerActor) { return true; }
-
-	const FVector Delta = GetActorLocation() - PlayerActor->GetActorLocation();
-	const float DistSq = Delta.SizeSquared();
-
-	if (MinDistanceToPlayer > 0.f && DistSq < FMath::Square(MinDistanceToPlayer))
-	{
+	if (PointCooldown > 0.f && World->GetTimeSeconds() - LastSpawnTimeSeconds < PointCooldown) 
 		return false;
-	}
-
-	if (bBlockIfPlayerInFOV && PlayerFOVAngleDegrees > 0.f)
-	{
-		const FVector ViewDir = PlayerActor->GetActorForwardVector().GetSafeNormal();
-		const FVector ToAnchor = Delta.GetSafeNormal();
-		const float CosHalfFOV = FMath::Cos(FMath::DegreesToRadians(PlayerFOVAngleDegrees));
-		if (FVector::DotProduct(ViewDir, ToAnchor) > CosHalfFOV)
-		{
-			return false;
-		}
-	}
 
 	return true;
-}
-
-bool ASpawnAnchor::IsSpawnLocationOccupied(TSubclassOf<AActor> EnemyClass) const
-{
-	UWorld* World = GetWorld();
-	if (!World || !EnemyClass)
-	{
-		return false;
-	}
-
-	float Radius = 0.f;
-	float HalfHeight = 0.f;
-	GetEncounterSpawnCapsule(EnemyClass, Radius, HalfHeight);
-
-	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
-
-	TArray<FOverlapResult> Overlaps;
-	FCollisionObjectQueryParams ObjectQueryParams;
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_Pawn);
-
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EncounterSpawnOccupancy), false);
-	QueryParams.AddIgnoredActor(this);
-
-	const bool bHasOverlap = World->OverlapMultiByObjectType(Overlaps, SpawnTransform.GetLocation(), FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeCapsule(Radius, HalfHeight), QueryParams);
-
-	if (!bHasOverlap)
-	{
-		return false;
-	}
-
-	for (const FOverlapResult& Overlap : Overlaps)
-	{
-		const AActor* Other = Overlap.GetActor();
-		if (Other && Other != this && !Other->IsActorBeingDestroyed())
-		{
-			return true;
-		}
-	}
-
-	return false;
 }
 
 AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 {
 	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return nullptr;
-	}
-	if (!EnemyClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ASpawnAnchor::PerformSpawn: null EnemyClass at %s"), *GetName());
-		return nullptr;
-	}
+	
+	if (!World) return nullptr;
+
+	if (!EnemyClass) return nullptr;
 
 	LastSpawnTimeSeconds = World->GetTimeSeconds();
-	const FTransform SpawnTransform = BuildEncounterGroundedSpawnTransform(World, EnemyClass, GetActorTransform(), this);
-	if (IsSpawnLocationOccupied(EnemyClass))
+
+	FTransform SpawnTransform = GetActorTransform();
+	const AActor* ClassDefault = Cast<AActor>(EnemyClass->GetDefaultObject());
+	SpawnTransform.SetScale3D(ClassDefault ? ClassDefault->GetActorScale3D() : FVector::OneVector);
+
+	const USkeletalMeshComponent* MeshComp = ClassDefault ? ClassDefault->FindComponentByClass<USkeletalMeshComponent>() : nullptr;
+
+	if (MeshComp)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("ASpawnAnchor::PerformSpawn: anchor '%s' is occupied; skipping %s"), *GetName(), *EnemyClass->GetName());
-		return nullptr;
+		const FVector AnchorLocation = GetActorLocation();
+		const FVector MeshPivotOffset = SpawnTransform.TransformVector(MeshComp->GetRelativeLocation());
+		SpawnTransform.SetLocation(AnchorLocation - MeshPivotOffset);
 	}
 
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
@@ -204,10 +112,8 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 		if (UObjectPoolSubsystem* Pool = GI->GetSubsystem<UObjectPoolSubsystem>())
 		{
 			AActor* Acquired = Pool->AcquireFromPool(this, EnemyClass, SpawnTransform);
-			if (Acquired)
-			{
-				return Acquired;
-			}
+
+			if (Acquired) return Acquired;
 		}
 	}
 
@@ -216,10 +122,5 @@ AActor* ASpawnAnchor::PerformSpawn(TSubclassOf<AActor> EnemyClass)
 	Params.Owner = GetOwner();
 
 	AActor* Spawned = World->SpawnActor<AActor>(EnemyClass, SpawnTransform, Params);
-	if (!Spawned)
-	{
-		UE_LOG(LogTemp, Error, TEXT("ASpawnAnchor::PerformSpawn: SpawnActor returned null for %s"), *EnemyClass->GetName());
-	}
-
 	return Spawned;
 }

@@ -97,5 +97,4 @@ public:
 
 private:
 	FElementProgressionData* FindElementProgressionData(FName ElementName);
-	
 };

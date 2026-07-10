@@ -1,20 +1,31 @@
 #include "PlayerTutorialManager.h"
+#include "SaveSystem/InTheDarkGameInstance.h"
 
 APlayerTutorialManager::APlayerTutorialManager()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 }
 
 void APlayerTutorialManager::BeginPlay()
 {
-	Super::BeginPlay();
-
 	CurrentStep = 0;
 	SavedTutorialStep = CurrentStep;
 	bTutorialFinished = false;
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
+
+	if (UInTheDarkGameInstance* GI = UInTheDarkGameInstance::Get(this))
+	{
+		const FSavedTutorialState TutorialState = GI->GetTutorialState();
+		bTutorialFinished = TutorialState.bFinished;
+		CurrentStep = FMath::Clamp(TutorialState.SavedStep, 0, TutorialSteps.Num());
+		SavedTutorialStep = CurrentStep;
+	}
+
+	Super::BeginPlay();
+	UpdateTutorialTickEnabled();
 }
 
 void APlayerTutorialManager::Tick(float DeltaTime)
@@ -52,6 +63,12 @@ void APlayerTutorialManager::NextStep()
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
 
+	if (UInTheDarkGameInstance* GI = UInTheDarkGameInstance::Get(this))
+	{
+		GI->UpdateTutorialState(SavedTutorialStep, false);
+		GI->WriteSaveToDisk();
+	}
+
 	if (!IsValidCurrentStep())
 	{
 		FinishTutorial();
@@ -70,6 +87,7 @@ void APlayerTutorialManager::ShowStep()
 	}
 
 	AutoAdvanceTimer = 0.0f;
+	UpdateTutorialTickEnabled();
 	OnTutorialStepChanged.Broadcast(CurrentStep, TutorialSteps[CurrentStep]);
 }
 
@@ -221,6 +239,13 @@ void APlayerTutorialManager::FinishTutorial()
 	bControlPressed = false;
 	AutoAdvanceTimer = 0.0f;
 	HeldActions.Empty();
+	UpdateTutorialTickEnabled();
+
+	if (UInTheDarkGameInstance* GI = UInTheDarkGameInstance::Get(this))
+	{
+		GI->UpdateTutorialState(SavedTutorialStep, true);
+		GI->WriteSaveToDiskAsync();
+	}
 
 	OnTutorialFinished.Broadcast();
 }
@@ -237,6 +262,7 @@ void APlayerTutorialManager::ApplyLoadedTutorialState(int32 LoadedStep, bool bLo
 
 	if (bTutorialFinished)
 	{
+		UpdateTutorialTickEnabled();
 		OnTutorialFinished.Broadcast();
 		return;
 	}
@@ -259,4 +285,13 @@ void APlayerTutorialManager::InitializeTutorialInputDevice(bool bInitialUsingGam
 	{
 		ShowStep();
 	}
+}
+
+void APlayerTutorialManager::UpdateTutorialTickEnabled()
+{
+	const bool bShouldTick = !bTutorialFinished
+		&& IsValidCurrentStep()
+		&& TutorialSteps[CurrentStep].bAutoAdvanceAfterShow;
+
+	SetActorTickEnabled(bShouldTick);
 }

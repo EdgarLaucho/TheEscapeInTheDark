@@ -29,8 +29,11 @@ void ADialogueNPC::BeginPlay()
 void ADialogueNPC::HandleBeginOverlap(UPrimitiveComponent*, AActor* OtherActor, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	const UWorld* World = GetWorld();
+
 	if (!World) return;
+
 	const APlayerController* PC = World->GetFirstPlayerController();
+
 	if (PC && OtherActor == PC->GetPawn())
 		bPlayerInRange = true;
 }
@@ -39,7 +42,9 @@ void ADialogueNPC::HandleEndOverlap(UPrimitiveComponent*, AActor* OtherActor, UP
 {
 	const UWorld* World = GetWorld();
 	if (!World) return;
+
 	const APlayerController* PC = World->GetFirstPlayerController();
+	
 	if (PC && OtherActor == PC->GetPawn())
 		bPlayerInRange = false;
 }
@@ -47,13 +52,15 @@ void ADialogueNPC::HandleEndOverlap(UPrimitiveComponent*, AActor* OtherActor, UP
 bool ADialogueNPC::CanTriggerDialogue() const
 {
 	if (!DialogueData || DialogueID.IsNone()) return false;
+
 	const UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
 	return GI && !GI->IsDialogueSeen(DialogueID);
 }
 
 void ADialogueNPC::TriggerDialogue()
 {
-	if (!bPlayerInRange || bTriggeredThisSession || !DialogueData || DialogueID.IsNone()) return;
+	if (!bPlayerInRange || bTriggeredThisSession || !DialogueData || DialogueID.IsNone())
+		return;
 
 	const UWorld* World = GetWorld();
 	if (!World) return;
@@ -61,8 +68,7 @@ void ADialogueNPC::TriggerDialogue()
 	APlayerController* PC = World->GetFirstPlayerController();
 	if (!PC) return;
 
-	UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
-		UGameplayStatics::GetGameInstance(World));
+	UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(World));
 	if (!GI || GI->IsDialogueSeen(DialogueID)) return;
 
 	bTriggeredThisSession = true;

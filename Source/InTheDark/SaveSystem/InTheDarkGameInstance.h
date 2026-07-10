@@ -3,21 +3,23 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "SaveSystem/SaveTypes.h"
+#include "UObject/SoftObjectPtr.h"
 #include "InTheDarkGameInstance.generated.h"
 
+class AActor;
+class APawn;
+class UAudioComponent;
 class UInTheDarkSaveGame;
+class UUserWidget;
+class USoundBase;
 class UWorld;
-class USaveGame;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveWritten);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSaveSnapshotRequested);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEncounterCleared, FName, EncounterId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSaveWrittenAsync, bool, bSuccess);
 
-/**
- * Gestor del sistema de guardado. Posee la caché en memoria, gestiona los slots y el IO de disco.
- * Todo el estado persistente del juego pasa por aquí.
- */
 UCLASS(BlueprintType, Blueprintable)
 class INTHEDARK_API UInTheDarkGameInstance : public UGameInstance
 {
@@ -29,20 +31,24 @@ public:
 	virtual void Init() override;
 	virtual void Shutdown() override;
 
-	/** Acceso directo — evita el Cast manual en BP y C++. */
 	UFUNCTION(BlueprintPure, Category = "Save", meta = (WorldContext = "WorldContextObject", DisplayName = "Get InTheDark GameInstance"))
 	static UInTheDarkGameInstance* Get(const UObject* WorldContextObject);
-
-	// ──── Slots ─────────────────────────────────────────────────
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save|Config")
 	int32 MaxSlots = 3;
 
-	/** Vuelca el estado sucio del slot actual, cambia y carga (o crea) el slot destino. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
+	FName DefaultGameLevelName = TEXT("DesertTest");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
+	FName MainMenuLevelName = TEXT("Lvl_MainMenuEscape");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
+	FName CreditsLevelName = TEXT("Lvl_FinalCredits");
+
 	UFUNCTION(BlueprintCallable, Category = "Save|Slots")
 	void SwitchToSlot(int32 SlotIndex);
 
-	/** Lee los metadatos de un slot sin afectar la caché activa. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Slots")
 	FSaveSlotInfo GetSlotInfo(int32 SlotIndex) const;
 
@@ -52,11 +58,20 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Slots")
 	int32 GetCurrentSlotIndex() const { return CurrentSlotIndex; }
 
-	/** Elimina el archivo de guardado de un slot. Si es el slot activo, también resetea la caché. */
 	UFUNCTION(BlueprintCallable, Category = "Save|Slots")
 	void DeleteSlot(int32 SlotIndex);
 
-	// ──── Estado del jugador ──────────────────────────────────────────────
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void StartNewGameFromMenu(UObject* WorldContextObject, int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void ContinueGameFromMenu(UObject* WorldContextObject, int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void SaveCurrentGameAndOpenMainMenu(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Menu", meta = (WorldContext = "WorldContextObject"))
+	void OpenMainMenuWithoutSaving(UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Player")
 	void SavePlayerState(const FSavedPlayerState& State);
@@ -64,49 +79,17 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
 	const FSavedPlayerState& GetPlayerState() const { return PlayerStateCache; }
 
-	/** Guarda el estado del jugador con el ID de checkpoint dado y escribe en disco de forma asíncrona. */
 	UFUNCTION(BlueprintCallable, Category = "Save|Player")
 	void SaveAtCheckpoint(FName CheckpointID, const FSavedPlayerState& State);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
 	FName GetLastCheckpointID() const { return PlayerStateCache.LastCheckpointID; }
 
-	/** True si el jugador tiene una posición guardada (pasó por al menos un checkpoint). */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player")
-	bool HasSavedTransform() const { return PlayerStateCache.LastCheckpointID != NAME_None; }
+	bool HasSavedTransform() const { return HasValidSavedPlayerTransform(); }
 
-	/**
-	 * Devuelve el transform donde debe aparecer el jugador al cargar la escena:
-	 * - Si hay checkpoint guardado → usa el transform guardado.
-	 * - Si es partida nueva      → busca el primer PlayerStart del mundo y usa su transform.
-	 */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Player", meta = (WorldContext = "WorldContextObject"))
 	FTransform GetSpawnTransform(UObject* WorldContextObject) const;
-
-	// ──── Inventario ──────────────────────────────────────────────
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Inventory")
-	const TArray<FSavedInventoryEntry>& GetCachedInventory() const { return InventoryCache; }
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void SetCachedInventory(const TArray<FSavedInventoryEntry>& Inventory);
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void AddInventoryEntry(FName ItemRowName, int32 Quantity);
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void RemoveInventoryEntry(FName ItemRowName, int32 Quantity);
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void SetInventoryEntryQuantity(FName ItemRowName, int32 Quantity);
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Inventory")
-	int32 GetInventoryEntryQuantity(FName ItemRowName) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Inventory")
-	void ClearInventory();
-
-	// ──── World State (generic) ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|World")
 	void MarkWorldActor(FName Category, const FString& ActorID);
@@ -126,8 +109,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World")
 	static bool IsValidActorID(const FString& ActorID);
 
-	// Atajos — una línea, sin nuevas estructuras de datos.
-
 	UFUNCTION(BlueprintCallable, Category = "Save|World|Chest")
 	void RegisterOpenedChest(const FString& ChestID) { MarkWorldActor(FName("Chest"), ChestID); }
 
@@ -146,7 +127,11 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World|Door")
 	bool IsDoorOpened(const FString& DoorID) const { return IsWorldActorMarked(FName("Door"), DoorID); }
 
-	// ──── Progresión de Elementos ────────────────────────────────────────────
+	UFUNCTION(BlueprintCallable, Category = "Save|World|ElementalGate")
+	void RegisterElementalGateOpened(const FString& GateID) { MarkWorldActor(FName("ElementalGate"), GateID); }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|World|ElementalGate")
+	bool IsElementalGateOpened(const FString& GateID) const { return IsWorldActorMarked(FName("ElementalGate"), GateID); }
 
 	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
 	void UpdateElementProgression(const FSavedElementProgressionEntry& Entry);
@@ -160,23 +145,59 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Save|ElementProgression")
 	void ClearElementProgression();
 
-	// ──── Personalidad del Compañero ──────────────────────────────────────────────
-
 	UFUNCTION(BlueprintCallable, Category = "Save|Companion")
 	void UpdateCompanionPersonality(float Courage, float Anxiety, float Confidence, float AggressionAffinity, float StealthAffinity);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
 	FSavedCompanionPersonality GetCompanionPersonality() const { return CompanionPersonalityCache; }
 
-	// ──── Diálogos ──────────────────────────────────────────────
+	UFUNCTION(BlueprintCallable, Category = "Save|Companion")
+	void UpdateCompanionState(const FTransform& Transform, uint8 CurrentStateValue, bool bHasAwoken);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Companion")
+	void MarkCompanionAwoken(const FTransform& Transform, uint8 CurrentStateValue);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
+	FSavedCompanionState GetCompanionState() const { return CompanionStateCache; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
+	bool HasSavedCompanionState() const { return CompanionStateCache.bHasSavedState; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Companion")
+	bool HasCompanionAwoken() const { return CompanionStateCache.bHasAwoken; }
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Tutorial")
+	void UpdateTutorialState(int32 SavedStep, bool bFinished);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
+	FSavedTutorialState GetTutorialState() const { return TutorialStateCache; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
+	int32 GetSavedTutorialStep() const { return TutorialStateCache.SavedStep; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Tutorial")
+	bool IsTutorialFinished() const { return TutorialStateCache.bFinished; }
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void SetCurrentMusicZone(FName ZoneId, USoundBase* Music, float FadeTime = 0.5f);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void PlayMusicByAsset(USoundBase* Music, FName MusicId, FName ZoneId, float FadeTime = 0.5f);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void RestoreMusicFromSave(float FadeTime = 0.5f);
+
+	UFUNCTION(BlueprintCallable, Category = "Save|Music")
+	void StopMusic(float FadeTime = 0.5f, bool bRememberSilence = true);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Music")
+	FSavedMusicState GetMusicState() const { return MusicStateCache; }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Dialogue")
 	bool IsDialogueSeen(FName DialogueID) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Dialogue")
 	void MarkDialogueSeen(FName DialogueID);
-
-	// ──── Encounters ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Encounters")
 	void MarkEncounterCleared(FName EncounterId);
@@ -193,21 +214,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Save|Encounters")
 	void ClearEncounters();
 
-	// ──── Meta ──────────────────────────────────────────────
-
 	UFUNCTION(BlueprintCallable, Category = "Save|Meta")
 	void SetLastMapName(const FString& MapName);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Meta")
 	FString GetLastMapName() const { return CachedLastMapName; }
 
-	// ──── Progress ──────────────────────────────────────────────
-
-	/** Borra todo el estado en memoria. NO escribe en disco — llama a WriteSaveToDisk después si es necesario. */
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	void ClearProgress();
-
-	// ──── Disk IO ──────────────────────────────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Disk")
 	bool WriteSaveToDisk();
@@ -217,9 +231,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Save|Disk")
 	bool LoadOrCreateSave();
-
-	UFUNCTION(BlueprintCallable, Category = "Save|Disk")
-	void LoadOrCreateSaveAsync();
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Save|Disk")
 	bool HasLoadedSave() const { return bHasLoadedSave; }
@@ -236,7 +247,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Config")
 	bool bAutosaveOnMapChange = false;
 
-	// ──── Events ──────────────────────────────────────────────
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Companion")
+	TSoftClassPtr<AActor> CompanionClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Companion")
+	FVector CompanionLoadOffset = FVector(-150.f, 120.f, 20.f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Companion")
+	uint8 CompanionLoadedStateValue = 2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Music")
+	TSoftObjectPtr<USoundBase> DefaultFallbackMusic;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Save|Loading")
+	TSoftClassPtr<UUserWidget> LoadingScreenWidgetClass;
 
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnSaveLoaded OnSaveLoaded;
@@ -245,13 +269,13 @@ public:
 	FOnSaveWritten OnSaveWritten;
 
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
+	FOnSaveSnapshotRequested OnSaveSnapshotRequested;
+
+	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnSaveWrittenAsync OnSaveWrittenAsync;
 
 	UPROPERTY(BlueprintAssignable, Category = "Save|Events")
 	FOnEncounterCleared OnEncounterCleared;
-
-	/** Sobreescribe el nombre de slot. Solo para tests automatizados. */
-	void ForceSlotName(const FString& Slot, int32 UserIdx = 0);
 
 protected:
 	void CopyCacheToPayload(UInTheDarkSaveGame& Payload) const;
@@ -259,15 +283,38 @@ protected:
 	virtual bool MigrateSaveIfNeeded(UInTheDarkSaveGame& Payload);
 	UInTheDarkSaveGame* BuildPayload() const;
 	void HandleAsyncSaveCompleted(const FString& Slot, const int32 UserIndex, bool bSuccess);
-	void HandleAsyncLoadCompleted(const FString& Slot, const int32 UserIndex, USaveGame* Loaded);
 	void OnPostLoadMapWithWorld(UWorld* LoadedWorld);
 	void ResetCache();
 	FString GetSlotName(int32 SlotIndex) const;
+	bool IsValidSlotIndex(int32 SlotIndex) const;
+	bool IsMainMenuMap(const FString& MapName) const;
+	bool IsCreditsMap(const FString& MapName) const;
+	void RequestSaveSnapshot();
+	void CapturePlayerSnapshot();
+	void CaptureElementProgressionSnapshot();
+	void CaptureMusicSnapshot();
+	void RestoreLoadedWorldState(UWorld* LoadedWorld);
+	bool HasValidSavedPlayerTransform() const;
+	bool BuildSafePlayerLoadTransform(UWorld* World, const APawn* PlayerPawn, FTransform& OutTransform) const;
+	void PreparePlayerForStreamingRestore(APawn* PlayerPawn) const;
+	void FinishPlayerStreamingRestore(APawn* PlayerPawn) const;
+	FTransform GetFallbackPlayerStartTransform(UWorld* World) const;
+	void ShowLoadingScreen();
+	void HideLoadingScreen();
+	AActor* FindCompanionActor(UWorld* World) const;
+	FTransform BuildCompanionLoadTransform(UWorld* World, const APawn* PlayerPawn) const;
+	void ReactivateLoadedCompanion(AActor* CompanionActor);
+	UAudioComponent* GetPlayerMusicAudioComponent() const;
+	USoundBase* GetPlayerControllerCurrentMusic() const;
+	void SetPlayerControllerCurrentMusic(USoundBase* Music) const;
+	void ApplyMusicToAudioComponent(USoundBase* Music, float FadeTime);
 
 private:
-	TArray<FSavedInventoryEntry> InventoryCache;
 	TArray<FSavedElementProgressionEntry> ElementProgressionCache;
 	FSavedCompanionPersonality CompanionPersonalityCache;
+	FSavedCompanionState CompanionStateCache;
+	FSavedTutorialState TutorialStateCache;
+	FSavedMusicState MusicStateCache;
 	TMap<FName, TSet<FString>> WorldStateCache;
 	TSet<FName> ClearedEncountersCache;
 	TSet<FName> SeenDialoguesCache;
@@ -279,6 +326,14 @@ private:
 	bool bHasLoadedSave = false;
 	bool bSaveDirty = false;
 	bool bAsyncSaveInFlight = false;
-	bool bAsyncLoadInFlight = false;
+	bool bRequestingSaveSnapshot = false;
+	int32 PendingLoadRestoreAttempts = 0;
+	bool bWaitingForSavedPlayerGround = false;
 	FDelegateHandle PostLoadMapHandle;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> ActiveMusicComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> ActiveLoadingScreenWidget;
 };

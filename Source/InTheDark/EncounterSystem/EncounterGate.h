@@ -20,17 +20,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gate")
 	void Unlock();
 
+	UFUNCTION(BlueprintCallable, Category = "Gate")
+	void SetLockedInstant(bool bNewLocked);
+
 	UFUNCTION(BlueprintPure, Category = "Gate")
 	bool IsLocked() const { return bLocked; }
+
+	UFUNCTION(BlueprintPure, Category = "Gate")
+	FVector GetOpenRelativeLocation() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Gate")
 	void OnGateLocked();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Gate")
 	void OnGateUnlocked();
-
-	UFUNCTION(BlueprintCallable, Category = "Gate")
-	void FinishUnlock();
 
 protected:
 	virtual void BeginPlay() override;
@@ -41,25 +44,21 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate")
 	bool bStartLocked = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate", meta = (ClampMin = "0.0"))
+	float SinkDepthOffset = 450.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gate", meta = (ClampMin = "0.0"))
+	float SinkTime = 0.8f;
+
+protected:
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Gate")
+	FVector ClosedRelativeLocation = FVector::ZeroVector;
+
 private:
 	UPROPERTY(Transient)
 	bool bLocked = false;
 
-	UPROPERTY(Transient)
-	FVector ClosedRelativeLocation = FVector::ZeroVector;
-
-	FTimerHandle GateMoveTimerHandle;
-	FVector MoveStartRelativeLocation = FVector::ZeroVector;
-	FVector MoveTargetRelativeLocation = FVector::ZeroVector;
-	float MoveElapsedSeconds = 0.f;
-	float MoveDurationSeconds = 0.f;
-
 	void ApplyLockState();
 	void SnapGateToState(bool bClosed);
-	void StartGateMove(bool bClosed);
-	void UpdateGateMove();
 	void SetGateCollisionEnabled(bool bEnabled);
-	FVector GetOpenRelativeLocation() const;
-	float GetConfiguredSinkDepthOffset() const;
-	float GetConfiguredSinkTime() const;
 };

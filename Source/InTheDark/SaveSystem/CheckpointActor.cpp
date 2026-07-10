@@ -24,8 +24,7 @@ void ACheckpointActor::BeginPlay()
 	TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ACheckpointActor::HandleOverlap);
 }
 
-void ACheckpointActor::HandleOverlap(UPrimitiveComponent*, AActor* OtherActor,
-	UPrimitiveComponent*, int32, bool, const FHitResult&)
+void ACheckpointActor::HandleOverlap(UPrimitiveComponent*, AActor* OtherActor, UPrimitiveComponent*, int32, bool, const FHitResult&)
 {
 	if (CheckpointID.IsNone()) return;
 
@@ -35,11 +34,9 @@ void ACheckpointActor::HandleOverlap(UPrimitiveComponent*, AActor* OtherActor,
 	const APlayerController* PC = World->GetFirstPlayerController();
 	if (!PC || OtherActor != PC->GetPawn()) return;
 
-	UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(
-		UGameplayStatics::GetGameInstance(World));
+	UInTheDarkGameInstance* GI = Cast<UInTheDarkGameInstance>(UGameplayStatics::GetGameInstance(World));
 	if (!GI) return;
 
-	// Copia el estado actual del jugador (salud ya sincronizada por BP_Player) y actualiza la posición.
 	FSavedPlayerState State = GI->GetPlayerState();
 	State.Transform = OtherActor->GetActorTransform();
 	State.LastCheckpointID = CheckpointID;

@@ -30,11 +30,7 @@ void UDialogueSubsystem::StartDialogueWithMode(UDialogueData* Data, FName Dialog
 		WidgetClass = LoadClass<UDialogueWidget>(nullptr, TEXT("/Game/Blueprints/Dialogues/WBP_Dialogue.WBP_Dialogue_C"));
 	}
 	
-	if (!WidgetClass)
-	{
-		UE_LOG(LogTemp, Error, TEXT("DialogueSubsystem: WBP_Dialogue no encontrado; dialogo '%s' omitido."), *DialogueID.ToString());
-		return;
-	}
+	if (!WidgetClass) return;
 
 	Widget = CreateWidget<UDialogueWidget>(PC, WidgetClass);
 	if (!Widget) return;
@@ -66,6 +62,7 @@ void UDialogueSubsystem::StartDialogueWithMode(UDialogueData* Data, FName Dialog
 			{
 				Move->StopMovementImmediately();
 			}
+
 			Char->DisableInput(PC);
 		}
 	}
@@ -100,9 +97,7 @@ void UDialogueSubsystem::HandleLineFinishedRevealing()
 float UDialogueSubsystem::GetHoldSecondsForCurrentLine() const
 {
 	if (!ActiveData || !ActiveData->Lines.IsValidIndex(CurrentLineIndex))
-	{
 		return ActiveAmbientLineHoldSeconds;
-	}
 
 	const float OverrideSeconds = ActiveData->Lines[CurrentLineIndex].LineHoldSecondsOverride;
 	return OverrideSeconds > 0.0f ? OverrideSeconds : ActiveAmbientLineHoldSeconds;
@@ -141,6 +136,7 @@ void UDialogueSubsystem::EndDialogue()
 	}
 
 	SaveAndMarkSeen();
+	OnDialogueEnded.Broadcast(ActiveDialogueID);
 
 	if (Widget)
 	{

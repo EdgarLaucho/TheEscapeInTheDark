@@ -1,34 +1,15 @@
 #include "EncounterSystem/EncounterDirectorComponent.h"
 #include "EncounterSystem/CombatArena.h"
 #include "EncounterSystem/EncounterConfig.h"
+#include "EncounterSystem/EncounterTargetInterface.h"
 #include "EncounterSystem/SpawnAnchor.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Components/BoxComponent.h"
 #include "Engine/World.h"
-#include "Engine/AssetManager.h"
-#include "Engine/StreamableManager.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "GameFramework/Pawn.h"
 #include "TimerManager.h"
-
-UEncounterDirectorComponent::UEncounterDirectorComponent()
-{
-	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = false;
-	SetAutoActivate(true);
-}
-
-void UEncounterDirectorComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	if (State != EEncounterState::WaveActive)
-	{
-		return;
-	}
-
-	WaveElapsed += DeltaTime;
-	EvaluateWaveContinuation();
-}
 
 ACombatArena* UEncounterDirectorComponent::GetArena() const
 {
@@ -44,479 +25,254 @@ UEncounterConfig* UEncounterDirectorComponent::GetConfig() const
 const FEncounterWave* UEncounterDirectorComponent::GetCurrentWave() const
 {
 	const UEncounterConfig* Cfg = GetConfig();
-	if (!Cfg || !Cfg->Waves.IsValidIndex(CurrentWaveIndex)) { return nullptr; }
-	return &Cfg->Waves[CurrentWaveIndex];
-}
 
-AActor* UEncounterDirectorComponent::GetPlayerActor() const
-{
-	const UWorld* World = GetWorld();
-	if (!World) { return nullptr; }
-	APlayerController* PC = World->GetFirstPlayerController();
-	return PC ? PC->GetPawn() : nullptr;
+	if (!Cfg || !Cfg->Waves.IsValidIndex(CurrentWaveIndex))
+		return nullptr;
+
+	return &Cfg->Waves[CurrentWaveIndex];
 }
 
 UObjectPoolSubsystem* UEncounterDirectorComponent::GetPool() const
 {
 	if (UGameInstance* GI = UGameplayStatics::GetGameInstance(this))
-	{
 		return GI->GetSubsystem<UObjectPoolSubsystem>();
-	}
+
 	return nullptr;
 }
 
 int32 UEncounterDirectorComponent::GetAliveEnemyCount() const
 {
 	int32 Count = 0;
+
 	for (const TWeakObjectPtr<AActor>& E : AliveEnemies)
 	{
-		if (E.IsValid() && !E->IsActorBeingDestroyed()) { ++Count; }
+		if (E.IsValid() && !E->IsActorBeingDestroyed()) ++Count;
 	}
+
 	return Count;
 }
 
 void UEncounterDirectorComponent::StartEncounter()
 {
-	if (State != EEncounterState::Idle)
-	{
-		return;
-	}
-	const UEncounterConfig* Cfg = GetConfig();
-	if (!Cfg || Cfg->Waves.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: no config or no waves on %s"),
-			*GetOwner()->GetName());
-		return;
-	}
+	if (State != EEncounterState::Idle) return;
 
-	State = EEncounterState::Starting;
+	const UEncounterConfig* Cfg = GetConfig();
+	if (!Cfg || Cfg->Waves.Num() == 0) return;
+
 	CurrentWaveIndex = -1;
 	AliveEnemies.Reset();
-	PendingSpawns.Reset();
-	WaveElapsed = 0.f;
+	SpawnQueue.Reset();
 
 	if (UObjectPoolSubsystem* Pool = GetPool())
-	{
 		Pool->OnActorReleased.AddUniqueDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
-	}
 
-	PreloadEncounterClasses();
-}
-
-void UEncounterDirectorComponent::PreloadEncounterClasses()
-{
-	const UEncounterConfig* Cfg = GetConfig();
-	if (!Cfg)
+	if (ACombatArena* Arena = GetArena())
 	{
-		HandleEncounterClassesLoaded();
-		return;
+		if (Arena->ContainmentVolume)
+			Arena->ContainmentVolume->OnComponentEndOverlap.AddUniqueDynamic(this, &UEncounterDirectorComponent::HandleEnemyLeftContainment);
 	}
 
-	TArray<FSoftObjectPath> AssetsToLoad;
-	for (const FEncounterWave& Wave : Cfg->Waves)
-	{
-		for (const FEnemySpawn& Spawn : Wave.Spawns)
-		{
-			const FSoftObjectPath Path = Spawn.Enemy.ToSoftObjectPath();
-			if (Path.IsValid())
-			{
-				AssetsToLoad.AddUnique(Path);
-			}
-		}
-	}
-
-	if (AssetsToLoad.IsEmpty())
-	{
-		HandleEncounterClassesLoaded();
-		return;
-	}
-
-	FStreamableManager& StreamableManager = UAssetManager::GetStreamableManager();
-	EncounterPreloadHandle = StreamableManager.RequestAsyncLoad(
-		AssetsToLoad,
-		FStreamableDelegate::CreateUObject(this, &UEncounterDirectorComponent::HandleEncounterClassesLoaded));
-}
-
-void UEncounterDirectorComponent::HandleEncounterClassesLoaded()
-{
-	PreloadedEnemyClasses.Reset();
-
-	const UEncounterConfig* Cfg = GetConfig();
-	if (Cfg)
-	{
-		for (const FEncounterWave& Wave : Cfg->Waves)
-		{
-			for (const FEnemySpawn& Spawn : Wave.Spawns)
-			{
-				const FSoftObjectPath Path = Spawn.Enemy.ToSoftObjectPath();
-				if (!Path.IsValid())
-				{
-					continue;
-				}
-
-				if (UClass* LoadedClass = Spawn.Enemy.Get())
-				{
-					PreloadedEnemyClasses.Add(Path, LoadedClass);
-				}
-			}
-		}
-	}
-
-	SetComponentTickEnabled(true);
 	BeginNextWave();
 }
 
-TSubclassOf<AActor> UEncounterDirectorComponent::ResolveEnemyClass(const FEnemySpawn& Directive) const
+bool UEncounterDirectorComponent::IsEncounterActive() const
 {
-	const FSoftObjectPath Path = Directive.Enemy.ToSoftObjectPath();
-	if (!Path.IsValid())
-	{
-		return nullptr;
-	}
-
-	if (const TWeakObjectPtr<UClass>* CachedClass = PreloadedEnemyClasses.Find(Path))
-	{
-		return CachedClass->Get();
-	}
-
-	return Directive.Enemy.Get();
+	return State == EEncounterState::WaveDelay || State == EEncounterState::WaveActive;
 }
 
 void UEncounterDirectorComponent::BeginNextWave()
 {
 	const UEncounterConfig* Cfg = GetConfig();
-	if (!Cfg) { return; }
+
+	if (!Cfg) return;
 
 	CurrentWaveIndex += 1;
+
 	if (!Cfg->Waves.IsValidIndex(CurrentWaveIndex))
 	{
 		HandleEncounterCleared();
 		return;
 	}
 
+	State = EEncounterState::WaveDelay;
+
 	const FEncounterWave& Wave = Cfg->Waves[CurrentWaveIndex];
-	if (Wave.DelayBeforeWave > 0.f)
+
+	if (Wave.DelayBeforeWave > 0.f && GetWorld())
 	{
-		State = EEncounterState::Starting;
-		if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().SetTimer(DelayTimerHandle, this,
-				&UEncounterDirectorComponent::BeginWaveActuallyNow,
-				Wave.DelayBeforeWave, false);
-		}
+		GetWorld()->GetTimerManager().SetTimer(DelayTimerHandle, this, &UEncounterDirectorComponent::StartWave, Wave.DelayBeforeWave, false);
 	}
 	else
 	{
-		BeginWaveActuallyNow();
+		StartWave();
 	}
 }
 
-void UEncounterDirectorComponent::BeginWaveActuallyNow()
+void UEncounterDirectorComponent::StartWave()
 {
 	const FEncounterWave* Wave = GetCurrentWave();
-	if (!Wave) { return; }
+	if (!Wave) return;
 
+	SpawnQueue.Reset();
+	for (const FEnemySpawn& Spawn : Wave->Spawns)
+	{
+		if (!Spawn.Enemy)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: wave %d has a null enemy class."), CurrentWaveIndex);
+			continue;
+		}
+
+		for (int32 i = 0; i < FMath::Max(1, Spawn.Count); ++i)
+		{
+			SpawnQueue.Insert(Spawn.Enemy, 0);
+		}
+	}
+
+	WarmUpCurrentWavePools(*Wave);
 	State = EEncounterState::WaveActive;
-	WaveElapsed = 0.f;
 
-	SpawnDirectives(*Wave);
-
-	if (AliveEnemies.Num() == 0 && PendingSpawns.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: wave %d produced 0 enemies; treating as cleared."),
-			CurrentWaveIndex);
-		HandleWaveCleared();
-	}
-}
-
-TArray<ASpawnAnchor*> UEncounterDirectorComponent::GetAvailableAnchors(
-	TSubclassOf<AActor> EnemyClass,
-	const TSet<ASpawnAnchor*>* ReservedAnchors) const
-{
-	TArray<ASpawnAnchor*> Out;
 	const ACombatArena* Arena = GetArena();
-	if (!Arena) { return Out; }
-
-	AActor* Player = GetPlayerActor();
-
-	for (const TObjectPtr<ASpawnAnchor>& A : Arena->Anchors)
+	if (SpawnQueue.IsEmpty() || !Arena || Arena->Anchors.IsEmpty())
 	{
-		if (!A) { continue; }
-		if (ReservedAnchors && ReservedAnchors->Contains(A.Get()))
-		{
-			continue;
-		}
-		if (!A->IsAvailableForSpawn(Player))
-		{
-			continue;
-		}
-		if (EnemyClass && A->IsSpawnLocationOccupied(EnemyClass))
-		{
-			continue;
-		}
-		Out.Add(A);
-	}
-	return Out;
-}
-
-void UEncounterDirectorComponent::SpawnDirectives(const FEncounterWave& Wave)
-{
-	TSet<ASpawnAnchor*> ReservedAnchors;
-
-	for (const FEnemySpawn& Directive : Wave.Spawns)
-	{
-		SpawnDirective(Directive, ReservedAnchors);
-	}
-}
-
-void UEncounterDirectorComponent::SpawnDirective(const FEnemySpawn& Directive, TSet<ASpawnAnchor*>& ReservedAnchors)
-{
-	if (Directive.Enemy.IsNull())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: spawn directive has null Enemy class."));
-		return;
-	}
-
-	UClass* EnemyClass = ResolveEnemyClass(Directive);
-	if (!EnemyClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: enemy class is not loaded for %s."), *Directive.Enemy.ToString());
-		return;
-	}
-
-	for (int32 i = 0; i < FMath::Max(1, Directive.Count); ++i)
-	{
-		ASpawnAnchor* Anchor = ChooseAnchorForSpawn(EnemyClass, ReservedAnchors);
-		if (!Anchor)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: no free anchors for %s."), *EnemyClass->GetName());
-			continue;
-		}
-
-		const float Lead = FMath::Max(0.f, Directive.PreSpawnLead);
-		if (Lead > 0.f)
-		{
-			ScheduleSpawn(EnemyClass, Anchor, Lead);
-		}
-		else
-		{
-			TrackSpawnedEnemy(Anchor->PerformSpawn(EnemyClass));
-		}
-	}
-}
-
-ASpawnAnchor* UEncounterDirectorComponent::ChooseAnchorForSpawn(TSubclassOf<AActor> EnemyClass, TSet<ASpawnAnchor*>& ReservedAnchors) const
-{
-	TArray<ASpawnAnchor*> Candidates = GetAvailableAnchors(EnemyClass, &ReservedAnchors);
-	if (Candidates.IsEmpty())
-	{
-		const ACombatArena* Arena = GetArena();
-		if (Arena)
-		{
-			for (const TObjectPtr<ASpawnAnchor>& Anchor : Arena->Anchors)
-			{
-				if (!Anchor) { continue; }
-				if (ReservedAnchors.Contains(Anchor.Get())) { continue; }
-				if (Anchor->IsSpawnLocationOccupied(EnemyClass)) { continue; }
-				Candidates.Add(Anchor);
-			}
-		}
-	}
-
-	if (Candidates.IsEmpty())
-	{
-		return nullptr;
-	}
-
-	ASpawnAnchor* Picked = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
-	ReservedAnchors.Add(Picked);
-	return Picked;
-}
-
-void UEncounterDirectorComponent::ScheduleSpawn(TSubclassOf<AActor> EnemyClass, ASpawnAnchor* Anchor, float LeadSeconds)
-{
-	UWorld* World = GetWorld();
-	if (!World || !Anchor || !EnemyClass)
-	{
-		return;
-	}
-
-	const int32 PendingIndex = PendingSpawns.AddDefaulted();
-	FPendingSpawn& Pending = PendingSpawns[PendingIndex];
-	Pending.EnemyClass = EnemyClass;
-	Pending.Anchor = Anchor;
-
-	FTimerDelegate TimerDel;
-	TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, PendingIndex);
-	World->GetTimerManager().SetTimer(Pending.TimerHandle, TimerDel, LeadSeconds, false);
-}
-
-void UEncounterDirectorComponent::ExecutePendingSpawn(int32 PendingIndex)
-{
-	if (!PendingSpawns.IsValidIndex(PendingIndex)) { return; }
-
-	FPendingSpawn& Pending = PendingSpawns[PendingIndex];
-	if (!TryPreparePendingSpawn(Pending, PendingIndex))
-	{
-		return;
-	}
-
-	AActor* Spawned = Pending.Anchor->PerformSpawn(Pending.EnemyClass);
-	TrackSpawnedEnemy(Spawned);
-
-	if (State == EEncounterState::WaveActive && AliveEnemies.Num() == 0 && !HasActivePendingSpawns())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: all deferred spawns complete but 0 enemies alive; treating as cleared."));
+		UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: wave %d has no enemies or no anchors; treating as cleared."), CurrentWaveIndex);
 		HandleWaveCleared();
-	}
-}
-
-bool UEncounterDirectorComponent::TryPreparePendingSpawn(FPendingSpawn& Pending, int32 PendingIndex)
-{
-	if (!Pending.Anchor.IsValid() || !Pending.EnemyClass)
-	{
-		return false;
-	}
-
-	if (!Pending.Anchor->IsSpawnLocationOccupied(Pending.EnemyClass))
-	{
-		return true;
-	}
-
-	TArray<ASpawnAnchor*> Candidates = GetAvailableAnchors(Pending.EnemyClass);
-	if (!Candidates.IsEmpty())
-	{
-		Pending.Anchor = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
-		return true;
-	}
-
-	if (Pending.RetryCount < 10)
-	{
-		++Pending.RetryCount;
-		if (UWorld* World = GetWorld())
-		{
-			FTimerDelegate TimerDel;
-			TimerDel.BindUObject(this, &UEncounterDirectorComponent::ExecutePendingSpawn, PendingIndex);
-			World->GetTimerManager().SetTimer(Pending.TimerHandle, TimerDel, 0.35f, false);
-		}
-		return false;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("EncounterDirector: skipping spawn for %s; no free anchor after retries."),
-		*Pending.EnemyClass->GetName());
-	return false;
-}
-
-void UEncounterDirectorComponent::CancelPendingSpawns()
-{
-	if (EncounterPreloadHandle.IsValid())
-	{
-		EncounterPreloadHandle->CancelHandle();
-		EncounterPreloadHandle.Reset();
+		return;
 	}
 
 	if (UWorld* World = GetWorld())
+		World->GetTimerManager().SetTimer(SpawnTimerHandle, this, &UEncounterDirectorComponent::SpawnNextInQueue, Wave->SecondsBetweenSpawns, true);
+
+	SpawnNextInQueue();
+}
+
+void UEncounterDirectorComponent::WarmUpCurrentWavePools(const FEncounterWave& Wave)
+{
+	UObjectPoolSubsystem* Pool = GetPool();
+	if (!Pool) return;
+
+	const AActor* Owner = GetOwner();
+	FTransform WarmUpTransform = Owner ? Owner->GetActorTransform() : FTransform::Identity;
+	WarmUpTransform.SetLocation(WarmUpTransform.GetLocation() + FVector(0.f, 0.f, -10000.f));
+
+	TSet<TSubclassOf<AActor>> WarmedClasses;
+
+	for (const FEnemySpawn& Spawn : Wave.Spawns)
 	{
-		for (FPendingSpawn& P : PendingSpawns)
-		{
-			World->GetTimerManager().ClearTimer(P.TimerHandle);
-		}
+		if (!Spawn.Enemy || WarmedClasses.Contains(Spawn.Enemy)) continue;
+
+		Pool->WarmUpPool(this, Spawn.Enemy, WarmUpTransform);
+		WarmedClasses.Add(Spawn.Enemy);
 	}
-	PendingSpawns.Reset();
+}
+
+void UEncounterDirectorComponent::SpawnNextInQueue()
+{
+	const FEncounterWave* Wave = GetCurrentWave();
+
+	if (State != EEncounterState::WaveActive || !Wave) return;
+
+	if (SpawnQueue.IsEmpty())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+		}
+
+		CheckWaveCleared();
+		return;
+	}
+
+	if (GetAliveEnemyCount() >= Wave->MaxAlive) return;
+
+	ASpawnAnchor* Anchor = ChooseFreeAnchor();
+	if (!Anchor) return;
+
+	TSubclassOf<AActor> EnemyClass = SpawnQueue.Pop(EAllowShrinking::No);
+	TrackSpawnedEnemy(Anchor->PerformSpawn(EnemyClass));
+}
+
+ASpawnAnchor* UEncounterDirectorComponent::ChooseFreeAnchor() const
+{
+	const ACombatArena* Arena = GetArena();
+
+	if (!Arena) return nullptr;
+
+	TArray<ASpawnAnchor*> Free;
+
+	for (const TObjectPtr<ASpawnAnchor>& Anchor : Arena->Anchors)
+	{
+		if (Anchor && Anchor->IsAvailableForSpawn()) Free.Add(Anchor);
+	}
+
+	return Free.IsEmpty() ? nullptr : Free[FMath::RandRange(0, Free.Num() - 1)];
 }
 
 void UEncounterDirectorComponent::TrackSpawnedEnemy(AActor* Enemy)
 {
-	if (!Enemy) { return; }
-	AliveEnemies.Add(Enemy);
+	if (!Enemy) return;
+
+	AliveEnemies.AddUnique(Enemy);
+	Enemy->OnDestroyed.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
 	Enemy->OnDestroyed.AddDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
+
+	if (Enemy->GetClass()->ImplementsInterface(UEncounterTargetInterface::StaticClass()))
+		IEncounterTargetInterface::Execute_OnEncounterSpawned(Enemy, UGameplayStatics::GetPlayerPawn(this, 0));
 }
 
 void UEncounterDirectorComponent::ReleaseAliveEnemiesToPool()
 {
 	UObjectPoolSubsystem* Pool = GetPool();
-	for (const TWeakObjectPtr<AActor>& E : AliveEnemies)
+	const TArray<TWeakObjectPtr<AActor>> EnemiesToRelease = AliveEnemies;
+
+	for (const TWeakObjectPtr<AActor>& E : EnemiesToRelease)
 	{
-		if (!E.IsValid()) { continue; }
-		if (Pool && Pool->HasPool(E->GetClass()))
-		{
-			Pool->ReleaseToPool(E.Get());
-		}
-		else
-		{
-			E->Destroy();
-		}
+		if (!E.IsValid()) continue;
+
+		if (Pool) Pool->ReleaseToPool(E.Get());
+		else E->Destroy();
 	}
 }
 
 void UEncounterDirectorComponent::HandleEnemyDestroyed(AActor* DestroyedActor)
 {
-	AliveEnemies.RemoveAll([DestroyedActor](const TWeakObjectPtr<AActor>& E) {
+	if (DestroyedActor)
+		DestroyedActor->OnDestroyed.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
+
+	AliveEnemies.RemoveAll([DestroyedActor](const TWeakObjectPtr<AActor>& E)
+	{
 		return !E.IsValid() || E.Get() == DestroyedActor;
 	});
-	if (State == EEncounterState::WaveActive)
-	{
-		EvaluateWaveContinuation();
-	}
+
+	CheckWaveCleared();
 }
 
 void UEncounterDirectorComponent::HandleEnemyReleasedToPool(AActor* ReleasedActor)
 {
-	const int32 Removed = AliveEnemies.RemoveAll([ReleasedActor](const TWeakObjectPtr<AActor>& E) {
+	if (ReleasedActor)
+		ReleasedActor->OnDestroyed.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyDestroyed);
+
+	AliveEnemies.RemoveAll([ReleasedActor](const TWeakObjectPtr<AActor>& E)
+	{
 		return E.Get() == ReleasedActor;
 	});
-	if (Removed > 0 && State == EEncounterState::WaveActive)
-	{
-		EvaluateWaveContinuation();
-	}
+
+	CheckWaveCleared();
 }
 
-bool UEncounterDirectorComponent::HasActivePendingSpawns() const
+void UEncounterDirectorComponent::CheckWaveCleared()
 {
-	const UWorld* World = GetWorld();
-	if (!World) { return false; }
-	for (const FPendingSpawn& P : PendingSpawns)
-	{
-		if (World->GetTimerManager().IsTimerActive(P.TimerHandle)) { return true; }
-	}
-	return false;
-}
+	if (State != EEncounterState::WaveActive) return;
 
-bool UEncounterDirectorComponent::ShouldAdvanceWave(const FWaveContinuation& Rule, int32 Remaining) const
-{
-	switch (Rule.Mode)
-	{
-	case EWaveContinuationMode::OnAllCleared:
-		return Remaining == 0;
-	case EWaveContinuationMode::OnRemainingAtOrBelow:
-		return Remaining <= Rule.RemainingThreshold;
-	case EWaveContinuationMode::OnElapsedSince:
-		return WaveElapsed >= Rule.ElapsedSeconds;
-	case EWaveContinuationMode::Hybrid:
-		return Remaining <= Rule.RemainingThreshold || WaveElapsed >= Rule.ElapsedSeconds;
-	}
-	return false;
-}
-
-void UEncounterDirectorComponent::EvaluateWaveContinuation()
-{
-	const FEncounterWave* Wave = GetCurrentWave();
-	if (!Wave || HasActivePendingSpawns())
-	{
-		return;
-	}
-
-	if (ShouldAdvanceWave(Wave->Continuation, GetAliveEnemyCount()))
-	{
-		HandleWaveCleared();
-	}
+	if (SpawnQueue.IsEmpty() && GetAliveEnemyCount() == 0) HandleWaveCleared();
 }
 
 void UEncounterDirectorComponent::HandleWaveCleared()
 {
-	if (State != EEncounterState::WaveActive) { return; }
+	if (State != EEncounterState::WaveActive) return;
 
-	State = EEncounterState::PostClear;
+	State = EEncounterState::WaveDelay;
+
+	if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SpawnTimerHandle);
 
 	const UEncounterConfig* Cfg = GetConfig();
 	const bool bLastWave = Cfg && !Cfg->Waves.IsValidIndex(CurrentWaveIndex + 1);
@@ -525,9 +281,7 @@ void UEncounterDirectorComponent::HandleWaveCleared()
 	{
 		if (Cfg && Cfg->PostClearBeatSeconds > 0.f && GetWorld())
 		{
-			GetWorld()->GetTimerManager().SetTimer(PostClearTimerHandle, this,
-				&UEncounterDirectorComponent::HandleEncounterCleared,
-				Cfg->PostClearBeatSeconds, false);
+			GetWorld()->GetTimerManager().SetTimer(PostClearTimerHandle, this, &UEncounterDirectorComponent::HandleEncounterCleared, Cfg->PostClearBeatSeconds, false);
 		}
 		else
 		{
@@ -542,21 +296,66 @@ void UEncounterDirectorComponent::HandleWaveCleared()
 
 void UEncounterDirectorComponent::HandleEncounterCleared()
 {
-	if (State == EEncounterState::Cleared) { return; }
+	if (State == EEncounterState::Cleared) return;
+
 	State = EEncounterState::Cleared;
-	SetComponentTickEnabled(false);
-	CancelPendingSpawns();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+		World->GetTimerManager().ClearTimer(DelayTimerHandle);
+		World->GetTimerManager().ClearTimer(PostClearTimerHandle);
+	}
+
+	SpawnQueue.Reset();
 	ReleaseAliveEnemiesToPool();
 	AliveEnemies.Reset();
 
 	if (UObjectPoolSubsystem* Pool = GetPool())
-	{
 		Pool->OnActorReleased.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyReleasedToPool);
-	}
 
 	if (ACombatArena* Arena = GetArena())
 	{
+		if (Arena->ContainmentVolume)
+			Arena->ContainmentVolume->OnComponentEndOverlap.RemoveDynamic(this, &UEncounterDirectorComponent::HandleEnemyLeftContainment);
+
 		Arena->NotifyEncounterCleared();
 	}
-	OnEncounterCleared.Broadcast();
+}
+
+void UEncounterDirectorComponent::HandleEnemyLeftContainment(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (State != EEncounterState::WaveActive) return;
+	if (!IsValid(OtherActor) || OtherActor->IsActorBeingDestroyed() || OtherActor->IsHidden() || !OtherActor->GetActorEnableCollision()) return;
+	if (OtherComp && OtherComp->GetCollisionEnabled() == ECollisionEnabled::NoCollision) return;
+
+	const bool bIsTrackedEnemy = AliveEnemies.ContainsByPredicate([OtherActor](const TWeakObjectPtr<AActor>& E)
+	{
+		return E.Get() == OtherActor;
+	});
+
+	if (bIsTrackedEnemy) ReturnEnemyToAnchor(OtherActor);
+}
+
+void UEncounterDirectorComponent::ReturnEnemyToAnchor(AActor* Enemy)
+{
+	if (!Enemy) return;
+
+	const ASpawnAnchor* Anchor = ChooseFreeAnchor();
+	if (!Anchor)
+	{
+		const ACombatArena* Arena = GetArena();
+		Anchor = Arena && !Arena->Anchors.IsEmpty() ? Arena->Anchors[0] : nullptr;
+	}
+
+	if (!Anchor) return;
+
+	if (ACharacter* Character = Cast<ACharacter>(Enemy))
+	{
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+			Movement->StopMovementImmediately();
+	}
+
+	const FTransform ReturnTransform = ASpawnAnchor::BuildGroundedSpawnTransform(GetWorld(), Enemy->GetClass(), Anchor->GetActorTransform(), Anchor);
+	Enemy->SetActorLocation(ReturnTransform.GetLocation(), false, nullptr, ETeleportType::TeleportPhysics);
 }

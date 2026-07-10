@@ -1,4 +1,3 @@
-
 #include "Combat/ElementFusionComponent.h"
 
 UElementFusionComponent::UElementFusionComponent()
@@ -54,5 +53,3 @@ void UElementFusionComponent::EndFusionCooldown()
 {
 	bFusionOnCooldown = false;
 }
-
-

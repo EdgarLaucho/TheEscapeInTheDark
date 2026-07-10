@@ -22,7 +22,6 @@ void ULeashComponent::ActivateLeash(const FVector& Target)
 		if (AAIController* AIC = Cast<AAIController>(Pawn->GetController()))
 		{
 			AIC->StopMovement();
-			// Limpiar el foco para que el enemigo deje de mirar al jugador.
 			AIC->ClearFocus(EAIFocusPriority::Gameplay);
 		}
 	}
@@ -37,8 +36,6 @@ void ULeashComponent::DeactivateLeash()
 	bLeashActive = false;
 	LeashTarget = FVector::ZeroVector;
 
-	// Cancelar el MoveToLocation activo para que el BehaviorTree
-	// arranque desde cero en su siguiente tick en lugar de quedarse quieto.
 	if (const APawn* Pawn = Cast<APawn>(GetOwner()))
 	{
 		if (AAIController* AIC = Cast<AAIController>(Pawn->GetController()))
