@@ -74,21 +74,15 @@ The fusion system includes:
 
 ---
 
-## 📈 Progression System
+📈 Progression System
 
-The game includes a progression system linked to enemy eliminations.
+The game includes a point-based progression system linked to defeating enemies.
 
-The player can progress through different power levels by defeating enemies.
+Each enemy grants a specific amount of progression points when defeated. These points are accumulated by the player and used to increase their power level.
 
-Example progression thresholds:
+As the player reaches the required amount of progression points, a new level is unlocked.
 
-- Level 1 → Starting level
-- Level 2 → 5 eliminations
-- Level 3 → 15 eliminations
-
-The maximum level implemented in the project is **Level 3**.
-
----
+The maximum level implemented in the project is Level 3.
 
 ## 🎯 Targeting & Combat
 
